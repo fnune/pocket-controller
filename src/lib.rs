@@ -7,6 +7,7 @@ pub mod gadget;
 pub mod hid;
 pub mod interrupt;
 pub mod layer;
+pub mod personality;
 pub mod profile;
 pub mod shortcuts;
 pub mod system;

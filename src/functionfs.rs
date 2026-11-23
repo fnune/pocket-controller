@@ -9,9 +9,10 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::control::{Input, Kind};
-use crate::gadget::{self, GadgetFs, Identity, Layout, PortLease};
-use crate::hid::{self, SetupReply, SetupRequest};
+use crate::gadget::{self, GadgetFs, Layout, PortLease};
+use crate::hid::{SetupReply, SetupRequest};
 use crate::interrupt::Interruptible;
+use crate::personality::{self, Personality};
 use crate::xinput::{self, State};
 
 const EVENT_SIZE: usize = 12;
@@ -22,7 +23,6 @@ const EVENT_DISABLE: u8 = 3;
 const EVENT_SETUP: u8 = 4;
 const EVENT_SUSPEND: u8 = 5;
 const EVENT_RESUME: u8 = 6;
-const XBOX_LED_REPORT_TYPE: u8 = 0x01;
 const STOP_TIMEOUT: Duration = Duration::from_secs(3);
 const RETRY_PAUSE: Duration = Duration::from_millis(100);
 
@@ -55,34 +55,6 @@ pub fn parse_events(bytes: &[u8]) -> Vec<FunctionEvent> {
             }
         })
         .collect()
-}
-
-pub fn identity(kind: Kind) -> Identity {
-    match kind {
-        Kind::Xbox => Identity {
-            vendor: xinput::VENDOR_ID,
-            product: xinput::PRODUCT_ID,
-            release: xinput::DEVICE_RELEASE,
-            device_class: 0xff,
-            manufacturer: "Pocket Controller",
-            product_name: "Pocket Controller",
-        },
-        Kind::Gamepad => Identity {
-            vendor: hid::VENDOR_ID,
-            product: hid::PRODUCT_ID,
-            release: hid::DEVICE_RELEASE,
-            device_class: 0x00,
-            manufacturer: "Pocket Controller",
-            product_name: "Gamepad",
-        },
-    }
-}
-
-pub fn encode_report(kind: Kind, state: &State) -> Vec<u8> {
-    match kind {
-        Kind::Xbox => xinput::input_report(state).to_vec(),
-        Kind::Gamepad => hid::input_report(state).to_vec(),
-    }
 }
 
 struct Outbox {
@@ -118,7 +90,7 @@ impl From<io::Error> for BuildError {
 }
 
 pub struct Session {
-    kind: Kind,
+    personality: &'static dyn Personality,
     budget: xinput::EndpointBudget,
     shared: Arc<Shared>,
     threads: Vec<Interruptible>,
@@ -165,19 +137,22 @@ fn open_endpoint(mount_point: &Path, name: &str) -> io::Result<File> {
         .map_err(|error| io::Error::new(error.kind(), format!("could not open {name}: {error}")))
 }
 
-fn write_descriptors(ep0: &mut File, kind: Kind, budget: xinput::EndpointBudget) -> io::Result<()> {
-    match kind {
-        Kind::Xbox => {
-            if let Err(error) = ep0.write_all(&xinput::functionfs_descriptors(true, budget)) {
-                eprintln!(
-                    "functionfs refused the XUSB descriptor ({error}); using the interface without it"
-                );
-                ep0.write_all(&xinput::functionfs_descriptors(false, budget))?;
+fn write_descriptors(
+    ep0: &mut File,
+    personality: &dyn Personality,
+    budget: xinput::EndpointBudget,
+) -> io::Result<()> {
+    let mut candidates = personality.descriptors(budget).into_iter().peekable();
+    while let Some(descriptors) = candidates.next() {
+        match ep0.write_all(&descriptors) {
+            Ok(()) => break,
+            Err(error) if candidates.peek().is_some() => {
+                eprintln!("functionfs refused the descriptors ({error}); trying the next layout")
             }
+            Err(error) => return Err(error),
         }
-        Kind::Gamepad => ep0.write_all(&hid::functionfs_descriptors())?,
     }
-    ep0.write_all(&xinput::functionfs_strings())
+    ep0.write_all(&personality.strings())
 }
 
 impl Session {
@@ -190,7 +165,7 @@ impl Session {
         events: SessionEvents,
         known_budget: Option<xinput::EndpointBudget>,
     ) -> io::Result<Self> {
-        let budgets = budgets_to_try(kind, known_budget);
+        let budgets = personality::for_kind(kind).budgets(known_budget);
         let mut last_error = None;
         for budget in budgets {
             let mut session = Self::new(kind, budget);
@@ -213,12 +188,13 @@ impl Session {
     }
 
     fn new(kind: Kind, budget: xinput::EndpointBudget) -> Self {
+        let personality = personality::for_kind(kind);
         Self {
-            kind,
+            personality,
             budget,
             shared: Arc::new(Shared {
                 outbox: Mutex::new(Outbox {
-                    report: encode_report(kind, &State::default()),
+                    report: personality.encode(&State::default()),
                     generation: 1,
                     connected: false,
                     stopping: false,
@@ -239,24 +215,25 @@ impl Session {
         events: SessionEvents,
         budget: xinput::EndpointBudget,
     ) -> Result<(), BuildError> {
-        lease.attach(fs, layout, &identity(self.kind), serial)?;
+        lease.attach(fs, layout, &self.personality.identity(), serial)?;
         mount_functionfs(&layout.functionfs_mount).map_err(|error| {
             io::Error::new(error.kind(), format!("could not mount FunctionFS: {error}"))
         })?;
         let mut ep0 = open_endpoint(&layout.functionfs_mount, "ep0")?;
-        write_descriptors(&mut ep0, self.kind, budget)?;
+        write_descriptors(&mut ep0, self.personality, budget)?;
         let ep_in = open_endpoint(&layout.functionfs_mount, "ep1")?;
-        let ep_out = match self.kind {
-            Kind::Xbox => Some(open_endpoint(&layout.functionfs_mount, "ep2")?),
-            Kind::Gamepad => None,
+        let ep_out = if self.personality.has_out_endpoint() {
+            Some(open_endpoint(&layout.functionfs_mount, "ep2")?)
+        } else {
+            None
         };
         lease.bind(fs, layout).map_err(BuildError::Bind)?;
-        let kind = self.kind;
+        let personality = self.personality;
         let shared = self.shared.clone();
         let control_events = events.clone();
         self.threads
             .push(Interruptible::spawn("ep0", move |stopping| {
-                control_loop(ep0, kind, &shared, &control_events, stopping)
+                control_loop(ep0, personality, &shared, &control_events, stopping)
             })?);
         let shared = self.shared.clone();
         self.threads
@@ -266,7 +243,7 @@ impl Session {
         if let Some(ep_out) = ep_out {
             self.threads
                 .push(Interruptible::spawn("ep-out", move |stopping| {
-                    receive_loop(ep_out, &events, stopping)
+                    receive_loop(ep_out, personality, &events, stopping)
                 })?);
         }
         Ok(())
@@ -277,7 +254,7 @@ impl Session {
     }
 
     pub fn submit(&self, state: &State) {
-        let report = encode_report(self.kind, state);
+        let report = self.personality.encode(state);
         let mut outbox = self.shared.lock();
         if outbox.report != report {
             outbox.report = report;
@@ -308,18 +285,6 @@ impl Session {
     }
 }
 
-pub fn budgets_to_try(
-    kind: Kind,
-    known: Option<xinput::EndpointBudget>,
-) -> Vec<xinput::EndpointBudget> {
-    use xinput::EndpointBudget::{OneInterrupt, TwoInterrupt};
-    match (kind, known) {
-        (Kind::Gamepad, _) => vec![TwoInterrupt],
-        (Kind::Xbox, Some(budget)) => vec![budget],
-        (Kind::Xbox, None) => vec![TwoInterrupt, OneInterrupt],
-    }
-}
-
 fn set_connected(shared: &Shared, connected: bool) {
     let mut outbox = shared.lock();
     if outbox.connected != connected {
@@ -329,18 +294,15 @@ fn set_connected(shared: &Shared, connected: bool) {
     }
 }
 
-fn answer_setup(ep0: &mut File, kind: Kind, setup: &SetupRequest, shared: &Shared) {
-    let reply = match kind {
-        Kind::Gamepad => {
-            let report = shared.lock().report.clone();
-            let mut current = [0u8; hid::REPORT_LEN];
-            if report.len() == hid::REPORT_LEN {
-                current.copy_from_slice(&report);
-            }
-            hid::answer_setup(setup, &current)
-        }
-        Kind::Xbox => xinput::answer_setup(setup, &shared.lock().report),
-    };
+fn answer_setup(
+    ep0: &mut File,
+    personality: &dyn Personality,
+    setup: &SetupRequest,
+    shared: &Shared,
+) {
+    let report = shared.lock().report.clone();
+    let reply = personality.answer_setup(setup, &report);
+    let stalled = matches!(reply, SetupReply::Stall);
     let result = match reply {
         SetupReply::Data(bytes) => ep0.write(&bytes).map(drop),
         SetupReply::Acknowledge => ep0.read(&mut vec![0u8; setup.length as usize]).map(drop),
@@ -349,23 +311,15 @@ fn answer_setup(ep0: &mut File, kind: Kind, setup: &SetupRequest, shared: &Share
     };
     if let Err(error) = result
         && error.kind() != io::ErrorKind::Interrupted
-        && reply_was_not_a_stall(setup, kind)
+        && !stalled
     {
         eprintln!("could not answer setup request {setup:?}: {error}");
     }
 }
 
-fn reply_was_not_a_stall(setup: &SetupRequest, kind: Kind) -> bool {
-    let reply = match kind {
-        Kind::Gamepad => hid::answer_setup(setup, &[0; hid::REPORT_LEN]),
-        Kind::Xbox => xinput::answer_setup(setup, &[0; xinput::REPORT_LEN]),
-    };
-    !matches!(reply, SetupReply::Stall)
-}
-
 fn control_loop(
     mut ep0: File,
-    kind: Kind,
+    personality: &dyn Personality,
     shared: &Shared,
     events: &SessionEvents,
     stopping: &AtomicBool,
@@ -398,7 +352,7 @@ fn control_loop(
                     set_connected(shared, true);
                     events.send(Input::HostResumed);
                 }
-                FunctionEvent::Setup(setup) => answer_setup(&mut ep0, kind, &setup, shared),
+                FunctionEvent::Setup(setup) => answer_setup(&mut ep0, personality, &setup, shared),
                 FunctionEvent::Bind => {}
             }
         }
@@ -437,17 +391,18 @@ fn send_loop(mut ep_in: File, shared: &Shared, stopping: &AtomicBool) {
     }
 }
 
-fn receive_loop(mut ep_out: File, events: &SessionEvents, stopping: &AtomicBool) {
+fn receive_loop(
+    mut ep_out: File,
+    personality: &dyn Personality,
+    events: &SessionEvents,
+    stopping: &AtomicBool,
+) {
     let mut buffer = [0u8; 64];
     while !stopping.load(Ordering::SeqCst) {
         match ep_out.read(&mut buffer) {
             Ok(read) => {
-                let report = &buffer[..read];
-                if report.first() == Some(&XBOX_LED_REPORT_TYPE) {
-                    events.send(Input::XboxDriverSpoke);
-                } else if let Some(rumble) = xinput::parse_output_report(report) {
-                    events.send(Input::XboxDriverSpoke);
-                    events.send(Input::Rumble(rumble.level()));
+                for input in personality.read_output(&buffer[..read]) {
+                    events.send(input);
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
@@ -486,47 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn a_known_endpoint_budget_is_the_only_one_tried() {
-        use xinput::EndpointBudget::{OneInterrupt, TwoInterrupt};
-        assert_eq!(
-            budgets_to_try(Kind::Xbox, None),
-            vec![TwoInterrupt, OneInterrupt]
-        );
-        assert_eq!(
-            budgets_to_try(Kind::Xbox, Some(OneInterrupt)),
-            vec![OneInterrupt]
-        );
-        assert_eq!(
-            budgets_to_try(Kind::Gamepad, Some(OneInterrupt)),
-            vec![TwoInterrupt]
-        );
-    }
-
-    #[test]
     fn unknown_event_types_are_skipped() {
         assert!(parse_events(&raw_event(42, [0; 8])).is_empty());
-    }
-
-    #[test]
-    fn xbox_and_gamepad_identities_differ_so_hosts_do_not_reuse_a_cached_driver() {
-        let xbox = identity(Kind::Xbox);
-        let gamepad = identity(Kind::Gamepad);
-        assert_eq!((xbox.vendor, xbox.product), (0x045e, 0x028e));
-        assert_ne!(
-            (xbox.vendor, xbox.product),
-            (gamepad.vendor, gamepad.product)
-        );
-    }
-
-    #[test]
-    fn reports_are_encoded_per_kind() {
-        assert_eq!(
-            encode_report(Kind::Xbox, &State::default()).len(),
-            xinput::REPORT_LEN
-        );
-        assert_eq!(
-            encode_report(Kind::Gamepad, &State::default()).len(),
-            hid::REPORT_LEN
-        );
     }
 }
