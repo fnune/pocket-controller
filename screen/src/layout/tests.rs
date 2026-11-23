@@ -580,6 +580,11 @@ fn a_mode_change_while_connected_warns_in_plain_text() {
     same.mode = Mode::Xbox;
     let lines = texts(&draw_overlay(Some(same), None, None)).join(" ");
     assert!(!lines.contains(MODE_CHANGE_WARNING));
+    let elsewhere = texts(&draw_overlay(Some(settings_view(Row::Face)), None, None)).join(" ");
+    assert!(
+        !elsewhere.contains(MODE_CHANGE_WARNING),
+        "the warning belongs to the mode row only"
+    );
 }
 
 #[test]

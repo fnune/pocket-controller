@@ -172,7 +172,10 @@ pub struct SettingsView {
 
 impl SettingsView {
     pub fn mode_change_warning(&self) -> bool {
-        self.connected && self.mode != self.current_mode && self.mode.first_kind() != self.kind
+        self.cursor == Row::Mode
+            && self.connected
+            && self.mode != self.current_mode
+            && self.mode.first_kind() != self.kind
     }
 }
 
