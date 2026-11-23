@@ -1,21 +1,9 @@
 ## [0.1.0] - 2026-11-23
 
-### Features
+First release. Pocket Controller turns a handheld into a wired USB controller for a computer, with nothing to install on the computer. Only the TrimUI Brick on NextUI has been tested.
 
-- Add Pocket Controller, a USB controller mode for handhelds
-- Drop the MENU + SELECT passthrough
-- Add a settings overlay and a debug view
-- Show face layouts and wake keys in settings
-- Render screenshots on the computer
-
-### Bug fixes
-
-- Show the replug warning only on the mode row
-
-### Refactor
-
-- *(screen)* Draw the handheld from one SVG per device
-- *(screen)* Split the layout into one module per screen part
-- Keep the MENU shortcuts in one table
-- Detect the handheld model and keep its hardware facts in a profile
-- Put each USB mode behind a Personality trait
+- Xbox-style and Generic USB modes, and Automatic, which picks Xbox-style when the computer has the driver
+- MENU shortcuts: turbo per button, the D-pad as either analog stick, and a tap for Guide
+- A live drawing of the handheld that shows pressed buttons, turbo and the stick the D-pad drives
+- Settings for the face button layout, rumble, the screen while playing and the mode, and a debug view
+- Packages for NextUI (`Pocket.Controller.pak.zip`) and the stock TrimUI firmware (`PocketController-trimui-stock.zip`)
