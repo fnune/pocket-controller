@@ -1,0 +1,5 @@
+{
+  "label": "Pocket Controller",
+  "launch": "launch.sh",
+  "description": "Use this handheld as a wired controller on a computer"
+}
