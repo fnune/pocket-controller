@@ -1,3 +1,4 @@
+use crate::device::Device;
 use pocket_controller::control::{Diagnosis, Kind, LiveView, Mode, Screen};
 use pocket_controller::frame::Frame;
 use pocket_controller::layer::{DpadMode, Turbo};
@@ -58,7 +59,7 @@ pub enum Op {
         paint: Paint,
     },
     Image {
-        name: &'static str,
+        name: String,
         x: i32,
         y: i32,
     },
@@ -89,48 +90,6 @@ pub const IMAGES: &[&str] = &[
     "btn-menu",
     "btn-select",
     "btn-start",
-    "brick",
-    "brick-leaders",
-    "brick-press-x",
-    "brick-turbo-x",
-    "brick-turbo-press-x",
-    "brick-press-a",
-    "brick-turbo-a",
-    "brick-turbo-press-a",
-    "brick-press-b",
-    "brick-turbo-b",
-    "brick-turbo-press-b",
-    "brick-press-y",
-    "brick-turbo-y",
-    "brick-turbo-press-y",
-    "brick-press-l1",
-    "brick-turbo-l1",
-    "brick-turbo-press-l1",
-    "brick-press-l2",
-    "brick-turbo-l2",
-    "brick-turbo-press-l2",
-    "brick-press-r2",
-    "brick-turbo-r2",
-    "brick-turbo-press-r2",
-    "brick-press-r1",
-    "brick-turbo-r1",
-    "brick-turbo-press-r1",
-    "brick-press-menu",
-    "brick-press-select",
-    "brick-press-start",
-    "brick-press-stick",
-    "brick-press-dpad-up",
-    "brick-press-dpad-down",
-    "brick-press-dpad-left",
-    "brick-press-dpad-right",
-    "brick-press-volume-up",
-    "brick-press-volume-down",
-    "brick-fn-on",
-    "brick-gate",
-    "brick-gate-l",
-    "brick-gate-r",
-    "brick-stick-dot",
-    "brick-choice",
 ];
 const QUIT_HINT: &str = "Hold to quit";
 const SHORTCUTS_HINT: &str = "Hold for shortcuts";
@@ -192,9 +151,13 @@ impl Canvas<'_> {
         });
     }
 
-    fn image(&mut self, name: &'static str, x: i32, y: i32) {
+    fn image(&mut self, name: &str, x: i32, y: i32) {
         let (x, y) = (self.s(x), self.s(y));
-        self.ops.push(Op::Image { name, x, y });
+        self.ops.push(Op::Image {
+            name: name.to_string(),
+            x,
+            y,
+        });
     }
 
     fn design_width_of(&self, role: Role, text: &str) -> i32 {
@@ -241,25 +204,6 @@ const PICKER_TEXT_WIDTH: i32 = 608;
 const PICKER_LINE_HEIGHT: i32 = 21;
 const RECOMMENDED: &str = "Recommended";
 
-const BRICK: (i32, i32) = (296, 52);
-
-const BRICK_LABELS: [(&str, i32, i32, Align); 8] = [
-    ("Turbo", 290, 58, Align::Right),
-    ("Turbo", 734, 58, Align::Left),
-    ("D-pad", 286, 376, Align::Right),
-    ("Left analog stick", 286, 416, Align::Right),
-    ("Right analog stick", 286, 456, Align::Right),
-    ("Turbo", 734, 412, Align::Left),
-    ("Hold", 412, 526, Align::Right),
-    ("Settings", 612, 526, Align::Left),
-];
-
-const BRICK_CAPTIONS: [(&str, i32, i32, Align); 3] = [
-    ("D-pad acts as", 290, 340, Align::Right),
-    ("L3", 490, 438, Align::Center),
-    ("R3", 534, 438, Align::Center),
-];
-
 #[derive(Clone, Copy)]
 enum Control {
     Button(u16),
@@ -277,182 +221,152 @@ impl Control {
     }
 }
 
-struct TurboButton {
-    control: Control,
-    pressed: &'static str,
-    turbo: &'static str,
-    turbo_pressed: &'static str,
-    x: i32,
-    y: i32,
-}
-
-const fn turbo_button(control: Control, names: [&'static str; 3], x: i32, y: i32) -> TurboButton {
-    TurboButton {
-        control,
-        pressed: names[0],
-        turbo: names[1],
-        turbo_pressed: names[2],
-        x,
-        y,
-    }
-}
-
-const TURBO_BUTTONS: [TurboButton; 8] = [
-    turbo_button(
-        Control::Button(xinput::Y),
-        ["brick-press-x", "brick-turbo-x", "brick-turbo-press-x"],
-        596,
-        366,
-    ),
-    turbo_button(
-        Control::Button(xinput::B),
-        ["brick-press-a", "brick-turbo-a", "brick-turbo-press-a"],
-        626,
-        396,
-    ),
-    turbo_button(
-        Control::Button(xinput::A),
-        ["brick-press-b", "brick-turbo-b", "brick-turbo-press-b"],
-        596,
-        426,
-    ),
-    turbo_button(
-        Control::Button(xinput::X),
-        ["brick-press-y", "brick-turbo-y", "brick-turbo-press-y"],
-        566,
-        396,
-    ),
-    turbo_button(
-        Control::Button(xinput::LEFT_SHOULDER),
-        ["brick-press-l1", "brick-turbo-l1", "brick-turbo-press-l1"],
-        348,
-        68,
-    ),
-    turbo_button(
-        Control::LeftTrigger,
-        ["brick-press-l2", "brick-turbo-l2", "brick-turbo-press-l2"],
-        416,
-        68,
-    ),
-    turbo_button(
-        Control::RightTrigger,
-        ["brick-press-r2", "brick-turbo-r2", "brick-turbo-press-r2"],
-        548,
-        68,
-    ),
-    turbo_button(
-        Control::Button(xinput::RIGHT_SHOULDER),
-        ["brick-press-r1", "brick-turbo-r1", "brick-turbo-press-r1"],
-        616,
-        68,
-    ),
+const TURBO_CONTROLS: [(Control, &str); 8] = [
+    (Control::Button(xinput::Y), "x"),
+    (Control::Button(xinput::B), "a"),
+    (Control::Button(xinput::A), "b"),
+    (Control::Button(xinput::X), "y"),
+    (Control::Button(xinput::LEFT_SHOULDER), "l1"),
+    (Control::LeftTrigger, "l2"),
+    (Control::RightTrigger, "r2"),
+    (Control::Button(xinput::RIGHT_SHOULDER), "r1"),
 ];
 
-const PLAIN_BUTTONS: [(u16, &str, i32, i32); 9] = [
-    (xinput::DPAD_UP, "brick-press-dpad-up", 403, 377),
-    (xinput::DPAD_DOWN, "brick-press-dpad-down", 403, 425),
-    (xinput::DPAD_LEFT, "brick-press-dpad-left", 377, 403),
-    (xinput::DPAD_RIGHT, "brick-press-dpad-right", 425, 403),
-    (xinput::GUIDE, "brick-press-menu", 442, 473),
-    (xinput::BACK, "brick-press-select", 492, 473),
-    (xinput::START, "brick-press-start", 542, 473),
-    (xinput::LEFT_THUMB, "brick-press-stick", 478, 407),
-    (xinput::RIGHT_THUMB, "brick-press-stick", 522, 407),
+const PLAIN_CONTROLS: [(u16, &str); 9] = [
+    (xinput::DPAD_UP, "press-dpad-up"),
+    (xinput::DPAD_DOWN, "press-dpad-down"),
+    (xinput::DPAD_LEFT, "press-dpad-left"),
+    (xinput::DPAD_RIGHT, "press-dpad-right"),
+    (xinput::GUIDE, "press-menu"),
+    (xinput::BACK, "press-select"),
+    (xinput::START, "press-start"),
+    (xinput::LEFT_THUMB, "press-l3"),
+    (xinput::RIGHT_THUMB, "press-r3"),
 ];
 
 const DPAD_BUTTONS: u16 =
     xinput::DPAD_UP | xinput::DPAD_DOWN | xinput::DPAD_LEFT | xinput::DPAD_RIGHT;
-const GATE: (i32, i32) = (369, 369);
-const GATE_BADGE: (i32, i32) = (388, 388);
-const GATE_CENTRE: (i32, i32) = (412, 412);
-const STICK_TRAVEL: i32 = 30;
-const STICK_TRAVEL_DIAGONAL: i32 = 21;
-const STICK_DOT_HALF: i32 = 10;
+const DIAGONAL_PER_MILLE: i32 = 707;
 const CHOICE_GAP: i32 = 24;
 const CHOICE_HALF: i32 = 8;
-const DPAD_LABEL_RIGHT: i32 = 286;
+
+pub fn anchor_text(anchor: &str) -> Option<(&'static str, Role, Paint)> {
+    let label = |text| Some((text, Role::SheetLabel, Paint::Text));
+    let caption = |text| Some((text, Role::Caption, Paint::Muted));
+    match anchor {
+        "label-turbo-shoulders-left" | "label-turbo-shoulders-right" | "label-turbo-face" => {
+            label("Turbo")
+        }
+        "label-dpad-mode-dpad" => label(dpad_mode_label(DpadMode::Dpad)),
+        "label-dpad-mode-left-stick" => label(dpad_mode_label(DpadMode::LeftStick)),
+        "label-dpad-mode-right-stick" => label(dpad_mode_label(DpadMode::RightStick)),
+        "label-menu" => label("Hold"),
+        "label-start" => label("Settings"),
+        "caption-dpad-mode" => caption("D-pad acts as"),
+        "caption-l3" => caption("L3"),
+        "caption-r3" => caption("R3"),
+        _ => None,
+    }
+}
+
+fn dpad_mode_label(mode: DpadMode) -> &'static str {
+    match mode {
+        DpadMode::Dpad => "D-pad",
+        DpadMode::LeftStick => "Left analog stick",
+        DpadMode::RightStick => "Right analog stick",
+    }
+}
+
+fn dpad_mode_anchor(mode: DpadMode) -> &'static str {
+    match mode {
+        DpadMode::Dpad => "label-dpad-mode-dpad",
+        DpadMode::LeftStick => "label-dpad-mode-left-stick",
+        DpadMode::RightStick => "label-dpad-mode-right-stick",
+    }
+}
 
 fn dpad_direction(buttons: u16, negative: u16, positive: u16) -> i32 {
     i32::from(buttons & positive != 0) - i32::from(buttons & negative != 0)
 }
 
-fn stick_dot(buttons: u16) -> (i32, i32) {
+fn thumb_offset(buttons: u16, travel: i32) -> (i32, i32) {
     let x = dpad_direction(buttons, xinput::DPAD_LEFT, xinput::DPAD_RIGHT);
     let y = dpad_direction(buttons, xinput::DPAD_DOWN, xinput::DPAD_UP);
-    let travel = if x != 0 && y != 0 {
-        STICK_TRAVEL_DIAGONAL
+    let reach = if x != 0 && y != 0 {
+        travel * DIAGONAL_PER_MILLE / 1000
     } else {
-        STICK_TRAVEL
+        travel
     };
-    (
-        GATE_CENTRE.0 + x * travel - STICK_DOT_HALF,
-        GATE_CENTRE.1 - y * travel - STICK_DOT_HALF,
-    )
+    (x * reach, -y * reach)
 }
 
-fn dpad_choice_row(mode: DpadMode) -> (&'static str, i32) {
-    match mode {
-        DpadMode::Dpad => ("D-pad", 376),
-        DpadMode::LeftStick => ("Left analog stick", 416),
-        DpadMode::RightStick => ("Right analog stick", 456),
-    }
-}
-
-fn brick(canvas: &mut Canvas, live: &LiveView, labelled: bool) {
-    canvas.image("brick", BRICK.0, BRICK.1);
-    let analog = live.dpad != DpadMode::Dpad;
-    for (bit, name, x, y) in PLAIN_BUTTONS {
-        if live.buttons & bit != 0 && !(analog && bit & DPAD_BUTTONS != 0) {
-            canvas.image(name, x, y);
+impl Canvas<'_> {
+    fn layer(&mut self, device: &Device, name: &str) {
+        if let Some((x, y)) = device.image(name) {
+            self.image(name, x, y);
         }
     }
-    for (on, name, x, y) in [
-        (live.volume_up, "brick-press-volume-up", 324, 160),
-        (live.volume_down, "brick-press-volume-down", 324, 197),
-        (live.fn_switch, "brick-fn-on", 692, 160),
+}
+
+fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, labelled: bool) {
+    canvas.layer(device, "body");
+    let analog = live.dpad != DpadMode::Dpad;
+    for (bit, name) in PLAIN_CONTROLS {
+        if live.buttons & bit != 0 && !(analog && bit & DPAD_BUTTONS != 0) {
+            canvas.layer(device, name);
+        }
+    }
+    for (on, name) in [
+        (live.volume_up, "press-volume-up"),
+        (live.volume_down, "press-volume-down"),
+        (live.fn_switch, "fn-on"),
     ] {
         if on {
-            canvas.image(name, x, y);
+            canvas.layer(device, name);
         }
     }
-    for button in &TURBO_BUTTONS {
-        let pressed = button
-            .control
-            .in_mask(live.buttons, live.left_trigger, live.right_trigger);
-        let turbo = button.control.in_mask(
+    for (control, key) in TURBO_CONTROLS {
+        let pressed = control.in_mask(live.buttons, live.left_trigger, live.right_trigger);
+        let turbo = control.in_mask(
             live.turbo.buttons,
             live.turbo.left_trigger,
             live.turbo.right_trigger,
         );
-        let name = match (pressed, turbo) {
+        let state = match (pressed, turbo) {
             (false, false) => continue,
-            (true, false) => button.pressed,
-            (false, true) => button.turbo,
-            (true, true) => button.turbo_pressed,
+            (true, false) => "press",
+            (false, true) => "turbo",
+            (true, true) => "turbo-press",
         };
-        canvas.image(name, button.x, button.y);
+        canvas.layer(device, &format!("{state}-{key}"));
     }
     let badge = match live.dpad {
         DpadMode::Dpad => None,
-        DpadMode::LeftStick => Some("brick-gate-l"),
-        DpadMode::RightStick => Some("brick-gate-r"),
+        DpadMode::LeftStick => Some("stick-well-l"),
+        DpadMode::RightStick => Some("stick-well-r"),
     };
-    if let Some(badge) = badge {
-        canvas.image("brick-gate", GATE.0, GATE.1);
-        canvas.image(badge, GATE_BADGE.0, GATE_BADGE.1);
-        let (dot_x, dot_y) = stick_dot(live.buttons);
-        canvas.image("brick-stick-dot", dot_x, dot_y);
+    if let (Some(badge), Some(stick), Some((thumb_x, thumb_y))) =
+        (badge, device.stick("dpad"), device.image("stick-thumb"))
+    {
+        canvas.layer(device, "stick-well");
+        canvas.layer(device, badge);
+        let (dx, dy) = thumb_offset(live.buttons, stick.travel);
+        canvas.image("stick-thumb", thumb_x + dx, thumb_y + dy);
     }
     if labelled {
-        canvas.image("brick-leaders", BRICK.0, BRICK.1);
-        let (label, row_y) = dpad_choice_row(live.dpad);
-        let label_left = DPAD_LABEL_RIGHT - canvas.design_width_of(Role::SheetLabel, label);
-        canvas.image("brick-choice", label_left - CHOICE_GAP, row_y - CHOICE_HALF);
-        for (label, x, y, align) in BRICK_LABELS {
-            canvas.text(Role::SheetLabel, label, x, y, align, Paint::Text);
+        canvas.layer(device, "leaders");
+        if let Some(row) = device.anchor(dpad_mode_anchor(live.dpad)) {
+            let label_width = canvas.design_width_of(Role::SheetLabel, dpad_mode_label(live.dpad));
+            canvas.image(
+                "choice",
+                row.x - label_width - CHOICE_GAP,
+                row.y - CHOICE_HALF,
+            );
         }
-        for (caption, x, y, align) in BRICK_CAPTIONS {
-            canvas.text(Role::Caption, caption, x, y, align, Paint::Muted);
+        for (name, anchor) in device.anchors() {
+            if let Some((text, role, paint)) = anchor_text(name) {
+                canvas.text(role, text, anchor.x, anchor.y, anchor.align, paint);
+            }
         }
     }
 }
@@ -810,7 +724,13 @@ fn hold_bar(canvas: &mut Canvas, progress: u8) {
     );
 }
 
-pub fn layout(frame: &Frame, width: i32, height: i32, measure: Measure) -> Vec<Op> {
+pub fn layout(
+    frame: &Frame,
+    width: i32,
+    height: i32,
+    measure: Measure,
+    device: &Device,
+) -> Vec<Op> {
     let mut canvas = Canvas {
         ops: vec![Op::Fill {
             x: 0,
@@ -831,7 +751,7 @@ pub fn layout(frame: &Frame, width: i32, height: i32, measure: Measure) -> Vec<O
             dpad: view.dpad,
             ..frame.live.unwrap_or_default()
         };
-        brick(&mut canvas, &live, true);
+        handheld(&mut canvas, device, &live, true);
         if let Some(note) = &view.note {
             canvas.text(
                 Role::Body,
@@ -886,7 +806,7 @@ pub fn layout(frame: &Frame, width: i32, height: i32, measure: Measure) -> Vec<O
         }
         Screen::Connected(kind) => {
             let live = frame.live.unwrap_or_default();
-            brick(&mut canvas, &live, false);
+            handheld(&mut canvas, device, &live, false);
             connected_headline(&mut canvas, *kind, CONNECTED_HEADLINE_Y);
             if let Some(options) = options_line(&live) {
                 canvas.text(
@@ -913,6 +833,32 @@ pub fn layout(frame: &Frame, width: i32, height: i32, measure: Measure) -> Vec<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn brick() -> Device {
+        Device::parse(include_str!("../assets/devices/trimui-brick/manifest")).unwrap()
+    }
+
+    fn device_layers() -> Vec<String> {
+        let mut layers: Vec<String> = [
+            "body",
+            "leaders",
+            "choice",
+            "press-volume-up",
+            "press-volume-down",
+            "fn-on",
+            "stick-well",
+            "stick-well-l",
+            "stick-well-r",
+            "stick-thumb",
+        ]
+        .map(String::from)
+        .to_vec();
+        layers.extend(PLAIN_CONTROLS.map(|(_, name)| name.to_string()));
+        for (_, key) in TURBO_CONTROLS {
+            layers.extend(["press", "turbo", "turbo-press"].map(|state| format!("{state}-{key}")));
+        }
+        layers
+    }
     use pocket_controller::control::SheetView;
 
     const WIDTH: i32 = 1024;
@@ -950,7 +896,7 @@ mod tests {
             sheet: None,
             live: None,
         };
-        layout(&frame, WIDTH, HEIGHT, &fake_measure)
+        layout(&frame, WIDTH, HEIGHT, &fake_measure, &brick())
     }
 
     fn texts(ops: &[Op]) -> Vec<String> {
@@ -987,10 +933,10 @@ mod tests {
         }
     }
 
-    fn images(ops: &[Op]) -> Vec<&'static str> {
+    fn images(ops: &[Op]) -> Vec<&str> {
         ops.iter()
             .filter_map(|op| match op {
-                Op::Image { name, .. } => Some(*name),
+                Op::Image { name, .. } => Some(name.as_str()),
                 _ => None,
             })
             .collect()
@@ -1004,7 +950,8 @@ mod tests {
             (Diagnosis::SetupStuck, "link-stuck", "icon-warning"),
         ];
         for (diagnosis, link, icon) in expected {
-            let shown = images(&draw(Screen::Waiting(Mode::Xbox, diagnosis), None, None));
+            let ops = draw(Screen::Waiting(Mode::Xbox, diagnosis), None, None);
+            let shown = images(&ops);
             assert!(
                 shown.contains(&link) && shown.contains(&icon),
                 "{diagnosis:?}: {shown:?}"
@@ -1022,7 +969,10 @@ mod tests {
         ];
         for screen in screens {
             for name in images(&draw(screen, None, None)) {
-                assert!(IMAGES.contains(&name), "{name} is not in IMAGES");
+                assert!(
+                    IMAGES.contains(&name) || brick().image(name).is_some(),
+                    "{name} is in neither IMAGES nor the device manifest"
+                );
             }
         }
     }
@@ -1089,7 +1039,7 @@ mod tests {
             sheet: Some(view),
             live: None,
         };
-        layout(&frame, WIDTH, HEIGHT, &fake_measure)
+        layout(&frame, WIDTH, HEIGHT, &fake_measure, &brick())
     }
 
     #[test]
@@ -1113,7 +1063,7 @@ mod tests {
         let rings: Vec<(i32, i32)> = ops
             .iter()
             .filter_map(|op| match op {
-                Op::Image { name, x, y } if name.starts_with("brick-turbo") => Some((*x, *y)),
+                Op::Image { name, x, y } if name.starts_with("turbo") => Some((*x, *y)),
                 _ => None,
             })
             .collect();
@@ -1122,9 +1072,9 @@ mod tests {
             vec![(626, 396), (416, 68), (616, 68)],
             "printed A, L2 and R1"
         );
-        assert!(images(&ops).contains(&"brick-gate-l"));
-        assert!(images(&ops).contains(&"brick-choice"));
-        assert!(images(&ops).contains(&"brick-leaders"));
+        assert!(images(&ops).contains(&"stick-well-l"));
+        assert!(images(&ops).contains(&"choice"));
+        assert!(images(&ops).contains(&"leaders"));
         assert!(all.contains(&"Left analog stick".to_string()));
     }
 
@@ -1137,13 +1087,15 @@ mod tests {
             sheet: None,
             live: Some(live),
         };
-        layout(&frame, WIDTH, HEIGHT, &fake_measure)
+        layout(&frame, WIDTH, HEIGHT, &fake_measure, &brick())
     }
 
-    fn placed(ops: &[Op], prefix: &str) -> Vec<(&'static str, i32, i32)> {
+    fn placed<'o>(ops: &'o [Op], prefix: &str) -> Vec<(&'o str, i32, i32)> {
         ops.iter()
             .filter_map(|op| match op {
-                Op::Image { name, x, y } if name.starts_with(prefix) => Some((*name, *x, *y)),
+                Op::Image { name, x, y } if name.starts_with(prefix) => {
+                    Some((name.as_str(), *x, *y))
+                }
                 _ => None,
             })
             .collect()
@@ -1168,12 +1120,12 @@ mod tests {
         );
         assert!(images(&ops).contains(&"mode-gamepad-48-off"));
         assert_eq!(
-            placed(&ops, "brick-press"),
+            placed(&ops, "press"),
             vec![
-                ("brick-press-dpad-up", 403, 377),
-                ("brick-press-menu", 442, 473),
-                ("brick-press-a", 626, 396),
-                ("brick-press-l2", 416, 68),
+                ("press-dpad-up", 403, 377),
+                ("press-menu", 442, 473),
+                ("press-a", 626, 396),
+                ("press-l2", 416, 68),
             ],
             "printed A, D-pad up, MENU and L2"
         );
@@ -1186,21 +1138,58 @@ mod tests {
             fn_switch: true,
             ..LiveView::default()
         });
-        assert!(images(&ops).contains(&"brick-press-volume-down"));
-        assert!(images(&ops).contains(&"brick-fn-on"));
-        assert!(!images(&ops).contains(&"brick-press-volume-up"));
+        assert!(images(&ops).contains(&"press-volume-down"));
+        assert!(images(&ops).contains(&"fn-on"));
+        assert!(!images(&ops).contains(&"press-volume-up"));
     }
 
     #[test]
-    fn the_stick_dot_sits_where_the_emulated_stick_points() {
-        assert_eq!(stick_dot(0), (402, 402), "centred at rest");
-        assert_eq!(stick_dot(xinput::DPAD_UP), (402, 372));
-        assert_eq!(stick_dot(xinput::DPAD_LEFT), (372, 402));
+    fn the_stick_thumb_moves_where_the_emulated_stick_points() {
+        assert_eq!(thumb_offset(0, 30), (0, 0), "centred at rest");
+        assert_eq!(thumb_offset(xinput::DPAD_UP, 30), (0, -30));
+        assert_eq!(thumb_offset(xinput::DPAD_LEFT, 30), (-30, 0));
         assert_eq!(
-            stick_dot(xinput::DPAD_UP | xinput::DPAD_RIGHT),
-            (423, 381),
-            "diagonals stay inside the gate"
+            thumb_offset(xinput::DPAD_UP | xinput::DPAD_RIGHT, 30),
+            (21, -21),
+            "diagonals stay inside the well"
         );
+    }
+
+    #[test]
+    fn every_device_has_every_layer_the_layout_draws_and_nothing_else() {
+        let directory = format!("{}/assets/devices", env!("CARGO_MANIFEST_DIR"));
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&directory).unwrap() {
+            let folder = entry.unwrap().path();
+            let device =
+                Device::parse(&std::fs::read_to_string(folder.join("manifest")).unwrap()).unwrap();
+            let mut expected = device_layers();
+            expected.sort();
+            let mut actual: Vec<String> = device.image_names().map(String::from).collect();
+            actual.sort();
+            assert_eq!(actual, expected, "{}", folder.display());
+            for name in actual {
+                assert!(
+                    folder.join(format!("{name}.png")).exists(),
+                    "{} has no {name}.png",
+                    folder.display()
+                );
+            }
+            for (anchor, _) in device.anchors() {
+                assert!(
+                    anchor_text(anchor).is_some(),
+                    "{}: no text for anchor {anchor}",
+                    folder.display()
+                );
+            }
+            assert!(
+                device.stick("dpad").is_some(),
+                "{}: no stick-dpad anchor",
+                folder.display()
+            );
+            checked += 1;
+        }
+        assert!(checked > 0);
     }
 
     #[test]
@@ -1210,16 +1199,14 @@ mod tests {
             dpad: DpadMode::LeftStick,
             ..LiveView::default()
         });
-        assert!(placed(&ops, "brick-press-dpad").is_empty());
-        assert!(!placed(&ops, "brick-stick-dot").is_empty());
+        assert!(placed(&ops, "press-dpad").is_empty());
+        assert!(!placed(&ops, "stick-thumb").is_empty());
     }
 
     #[test]
     fn plain_dpad_mode_draws_no_gate() {
         let ops = draw_connected(LiveView::default());
-        assert!(
-            placed(&ops, "brick-gate").is_empty() && placed(&ops, "brick-stick-dot").is_empty()
-        );
+        assert!(placed(&ops, "stick-well").is_empty() && placed(&ops, "stick-thumb").is_empty());
     }
 
     #[test]
@@ -1235,14 +1222,14 @@ mod tests {
         });
         assert!(texts(&ops).contains(&"Turbo A, R1, R2 · D-pad as left analog stick".to_string()));
         assert_eq!(
-            placed(&ops, "brick-turbo"),
+            placed(&ops, "turbo"),
             vec![
-                ("brick-turbo-a", 626, 396),
-                ("brick-turbo-r2", 548, 68),
-                ("brick-turbo-r1", 616, 68),
+                ("turbo-a", 626, 396),
+                ("turbo-r2", 548, 68),
+                ("turbo-r1", 616, 68),
             ]
         );
-        assert!(placed(&ops, "brick-gate").contains(&("brick-gate-l", 388, 388)));
+        assert!(placed(&ops, "stick-well").contains(&("stick-well-l", 388, 388)));
         assert!(images(&ops).contains(&"btn-select") && images(&ops).contains(&"btn-start"));
     }
 

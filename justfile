@@ -12,7 +12,7 @@ ssh_options := "-i " + ssh_key + " -o BatchMode=yes -o IdentitiesOnly=yes -o Log
 default:
     @just --list
 
-check: lint test
+check: lint test assets-check
 
 lint:
     cargo fmt --all --check
@@ -30,7 +30,8 @@ pak: build (presenter "tg5040-nextui" "tg5040") (presenter "tg5050-nextui" "tg50
     mkdir -p "{{ pak }}/bin/arm64" "{{ pak }}/bin/arm64-gnu"
     cp {{ screen_release }}/pocket-controller-screen "{{ pak }}/bin/arm64-gnu/"
     mkdir -p "{{ pak }}/assets"
-    find screen/assets -maxdepth 1 -name '*.png' ! -name 'preview-*' -exec cp {} "{{ pak }}/assets/" \;
+    cp screen/assets/*.png "{{ pak }}/assets/"
+    cp -r screen/assets/devices "{{ pak }}/assets/"
     cp packaging/nextui/launch.sh packaging/nextui/pak.json "{{ pak }}/"
     cp {{ release }}/pocket-controller "{{ pak }}/bin/arm64/"
     for platform in tg5040 tg5050 h700; do mkdir -p "{{ pak }}/bin/$platform" && cp ".cache/minui-presenter-$platform" "{{ pak }}/bin/$platform/minui-presenter"; done
@@ -79,3 +80,9 @@ screenshots: deploy
         ssh {{ ssh_options }} {{ brick }} "cat /tmp/pocket-controller-screenshots/$shot.raw" \
             | magick -size 1024x2304 -depth 8 bgra:- -crop "1024x768+0+$y" +repage -alpha off "docs/screenshots/$shot.png"; \
     done
+
+assets:
+    scripts/assets.py
+
+assets-check:
+    scripts/assets.py --check

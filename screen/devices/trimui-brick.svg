@@ -1,0 +1,223 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="768" viewBox="0 0 1024 768">
+  <svg id="body" x="296" y="52" width="432" height="504" viewBox="0 0 432 504">
+    <g transform="translate(-296 -92)">
+      <rect x="348" y="108" width="60" height="30" rx="7" fill="#777777" />
+      <text x="378" y="125" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L1</text>
+      <rect x="416" y="108" width="60" height="30" rx="7" fill="#777777" />
+      <text x="446" y="125" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L2</text>
+      <rect x="548" y="108" width="60" height="30" rx="7" fill="#777777" />
+      <text x="578" y="125" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R2</text>
+      <rect x="616" y="108" width="60" height="30" rx="7" fill="#777777" />
+      <text x="646" y="125" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R1</text>
+      <rect x="324" y="200" width="16" height="70" rx="5" fill="#777777" />
+      <rect x="324" y="233" width="8" height="4" fill="#000000" />
+      <rect x="684" y="200" width="16" height="30" rx="5" fill="#444444" />
+      <rect x="684" y="215" width="16" height="15" rx="5" fill="#777777" />
+      <rect x="684" y="252" width="16" height="30" rx="5" fill="#777777" />
+      <rect x="334" y="132" width="356" height="416" rx="28" fill="#1e2329" stroke="#999999" stroke-width="4" />
+      <rect x="352" y="150" width="320" height="240" rx="10" fill="#000000" />
+      <rect x="399" y="413" width="26" height="78" rx="6" fill="#777777" />
+      <rect x="373" y="439" width="78" height="26" rx="6" fill="#777777" />
+      <circle cx="612" cy="422" r="14.5" fill="#000000" stroke="#999999" stroke-width="3" />
+      <text x="612" y="428" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">X</text>
+      <circle cx="642" cy="452" r="14.5" fill="#000000" stroke="#999999" stroke-width="3" />
+      <text x="642" y="458" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">A</text>
+      <circle cx="612" cy="482" r="14.5" fill="#000000" stroke="#999999" stroke-width="3" />
+      <text x="612" y="488" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">B</text>
+      <circle cx="582" cy="452" r="14.5" fill="#000000" stroke="#999999" stroke-width="3" />
+      <text x="582" y="458" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">Y</text>
+      <rect x="478" y="447" width="24" height="10" rx="5" fill="#777777" />
+      <rect x="522" y="447" width="24" height="10" rx="5" fill="#777777" />
+      <rect x="442" y="513" width="40" height="22" rx="11" fill="#000000" />
+      <polygon points="462.00,518.03 459.14,519.68 459.14,522.98 462.00,524.63 464.86,522.98 464.86,519.68" fill="#ffffff" />
+      <polygon points="458.34,524.37 455.48,526.02 455.48,529.32 458.34,530.97 461.20,529.32 461.20,526.02" fill="#ffffff" />
+      <polygon points="465.66,524.37 462.80,526.02 462.80,529.32 465.66,530.97 468.52,529.32 468.52,526.02" fill="#ffffff" />
+      <rect x="492" y="513" width="40" height="22" rx="11" fill="#000000" />
+      <rect x="503.0" y="522" width="18" height="4" rx="2" fill="#ffffff" />
+      <rect x="542" y="513" width="40" height="22" rx="11" fill="#000000" />
+      <path d="M557 518.5L567 524L557 529.5Z" fill="#ffffff" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" />
+    </g>
+  </svg>
+  <svg id="press-x" x="596" y="366" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">X</text>
+  </svg>
+  <svg id="turbo-x" x="596" y="366" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">X</text>
+  </svg>
+  <svg id="turbo-press-x" x="596" y="366" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <circle cx="16" cy="16" r="11.5" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">X</text>
+  </svg>
+  <svg id="press-a" x="626" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">A</text>
+  </svg>
+  <svg id="turbo-a" x="626" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">A</text>
+  </svg>
+  <svg id="turbo-press-a" x="626" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <circle cx="16" cy="16" r="11.5" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">A</text>
+  </svg>
+  <svg id="press-b" x="596" y="426" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">B</text>
+  </svg>
+  <svg id="turbo-b" x="596" y="426" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">B</text>
+  </svg>
+  <svg id="turbo-press-b" x="596" y="426" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <circle cx="16" cy="16" r="11.5" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">B</text>
+  </svg>
+  <svg id="press-y" x="566" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">Y</text>
+  </svg>
+  <svg id="turbo-y" x="566" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">Y</text>
+  </svg>
+  <svg id="turbo-press-y" x="566" y="396" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#9b2257" />
+    <circle cx="16" cy="16" r="11.5" fill="#ffffff" />
+    <text x="16" y="22" text-anchor="middle" font-size="17" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">Y</text>
+  </svg>
+  <svg id="press-l1" x="348" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L1</text>
+  </svg>
+  <svg id="turbo-l1" x="348" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">L1</text>
+  </svg>
+  <svg id="turbo-press-l1" x="348" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <path d="M4 22V7a3 3 0 0 1 3-3H53a3 3 0 0 1 3 3V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L1</text>
+  </svg>
+  <svg id="press-l2" x="416" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L2</text>
+  </svg>
+  <svg id="turbo-l2" x="416" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">L2</text>
+  </svg>
+  <svg id="turbo-press-l2" x="416" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <path d="M4 22V7a3 3 0 0 1 3-3H53a3 3 0 0 1 3 3V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">L2</text>
+  </svg>
+  <svg id="press-r2" x="548" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R2</text>
+  </svg>
+  <svg id="turbo-r2" x="548" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">R2</text>
+  </svg>
+  <svg id="turbo-press-r2" x="548" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <path d="M4 22V7a3 3 0 0 1 3-3H53a3 3 0 0 1 3 3V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R2</text>
+  </svg>
+  <svg id="press-r1" x="616" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R1</text>
+  </svg>
+  <svg id="turbo-r1" x="616" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">R1</text>
+  </svg>
+  <svg id="turbo-press-r1" x="616" y="68" width="60" height="22" viewBox="0 0 60 22">
+    <path d="M0 22V7a7 7 0 0 1 7-7H53a7 7 0 0 1 7 7V22Z" fill="#9b2257" />
+    <path d="M4 22V7a3 3 0 0 1 3-3H53a3 3 0 0 1 3 3V22Z" fill="#ffffff" />
+    <text x="30" y="17" text-anchor="middle" font-size="15" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#000000">R1</text>
+  </svg>
+  <svg id="press-dpad-up" x="403" y="377" width="18" height="22" viewBox="0 0 18 22">
+    <rect width="18" height="22" rx="3" fill="#ffffff" />
+  </svg>
+  <svg id="press-dpad-down" x="403" y="425" width="18" height="22" viewBox="0 0 18 22">
+    <rect width="18" height="22" rx="3" fill="#ffffff" />
+  </svg>
+  <svg id="press-dpad-left" x="377" y="403" width="22" height="18" viewBox="0 0 22 18">
+    <rect width="22" height="18" rx="3" fill="#ffffff" />
+  </svg>
+  <svg id="press-dpad-right" x="425" y="403" width="22" height="18" viewBox="0 0 22 18">
+    <rect width="22" height="18" rx="3" fill="#ffffff" />
+  </svg>
+  <svg id="press-menu" x="442" y="473" width="40" height="22" viewBox="0 0 40 22">
+    <rect width="40" height="22" rx="11" fill="#ffffff" />
+    <polygon points="20.00,5.03 17.14,6.68 17.14,9.98 20.00,11.63 22.86,9.98 22.86,6.68" fill="#000000" />
+    <polygon points="16.34,11.37 13.48,13.02 13.48,16.32 16.34,17.97 19.20,16.32 19.20,13.02" fill="#000000" />
+    <polygon points="23.66,11.37 20.80,13.02 20.80,16.32 23.66,17.97 26.52,16.32 26.52,13.02" fill="#000000" />
+  </svg>
+  <svg id="press-select" x="492" y="473" width="40" height="22" viewBox="0 0 40 22">
+    <rect width="40" height="22" rx="11" fill="#ffffff" />
+    <rect x="11.0" y="9" width="18" height="4" rx="2" fill="#000000" />
+  </svg>
+  <svg id="press-start" x="542" y="473" width="40" height="22" viewBox="0 0 40 22">
+    <rect width="40" height="22" rx="11" fill="#ffffff" />
+    <path d="M15 5.5L25 11L15 16.5Z" fill="#000000" stroke="#000000" stroke-width="2" stroke-linejoin="round" />
+  </svg>
+  <svg id="press-l3" x="478" y="407" width="24" height="10" viewBox="0 0 24 10">
+    <rect width="24" height="10" rx="5" fill="#ffffff" />
+  </svg>
+  <svg id="press-r3" x="522" y="407" width="24" height="10" viewBox="0 0 24 10">
+    <rect width="24" height="10" rx="5" fill="#ffffff" />
+  </svg>
+  <svg id="press-volume-up" x="324" y="160" width="8" height="33" viewBox="0 0 8 33">
+    <rect width="16" height="70" rx="5" fill="#ffffff" />
+  </svg>
+  <svg id="press-volume-down" x="324" y="197" width="8" height="33" viewBox="0 0 8 33">
+    <rect y="-37" width="16" height="70" rx="5" fill="#ffffff" />
+  </svg>
+  <svg id="fn-on" x="692" y="160" width="8" height="30" viewBox="0 0 8 30">
+    <rect x="-8" width="16" height="30" rx="5" fill="#444444" />
+    <rect x="-8" width="16" height="15" rx="5" fill="#ffffff" />
+  </svg>
+  <svg id="stick-well" x="369" y="369" width="86" height="86" viewBox="0 0 86 86">
+    <circle cx="43" cy="43" r="43" fill="#5a626c" />
+    <circle cx="43" cy="43" r="41" fill="#3a3f47" />
+  </svg>
+  <svg id="stick-well-l" x="388" y="388" width="48" height="48" viewBox="0 0 48 48">
+    <text x="24" y="40.61" text-anchor="middle" font-size="44" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#4a515b">L</text>
+  </svg>
+  <svg id="stick-well-r" x="388" y="388" width="48" height="48" viewBox="0 0 48 48">
+    <text x="24" y="40.61" text-anchor="middle" font-size="44" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#4a515b">R</text>
+  </svg>
+  <svg id="stick-thumb" x="402" y="402" width="20" height="20" viewBox="0 0 20 20">
+    <circle cx="10" cy="10" r="10" fill="#000000" />
+    <circle cx="10" cy="10" r="8" fill="#e6e6e6" />
+  </svg>
+  <svg id="choice" x="176" y="368" width="16" height="16" viewBox="0 0 16 16">
+    <path d="M2.5 8.5l4 4 7-8.5" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+  <svg id="leaders" x="296" y="52" width="432" height="504" viewBox="0 0 432 504">
+    <g transform="translate(-296 -92)">
+      <path d="M378 104V98M446 104V98H300M578 104V98H724M646 104V98M395 416H298M369 456H298M438 469V496H298M298 404V508M666 452H724M462 539V566H422M562 539V566H602" fill="none" stroke="#777777" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </svg>
+  <g id="anchors" display="none">
+    <circle id="label-turbo-shoulders-left" cx="290" cy="58" r="3" data-align="right" />
+    <circle id="label-turbo-shoulders-right" cx="734" cy="58" r="3" data-align="left" />
+    <circle id="label-dpad-mode-dpad" cx="286" cy="376" r="3" data-align="right" />
+    <circle id="label-dpad-mode-left-stick" cx="286" cy="416" r="3" data-align="right" />
+    <circle id="label-dpad-mode-right-stick" cx="286" cy="456" r="3" data-align="right" />
+    <circle id="label-turbo-face" cx="734" cy="412" r="3" data-align="left" />
+    <circle id="label-menu" cx="412" cy="526" r="3" data-align="right" />
+    <circle id="label-start" cx="612" cy="526" r="3" data-align="left" />
+    <circle id="caption-dpad-mode" cx="290" cy="340" r="3" data-align="right" />
+    <circle id="caption-l3" cx="490" cy="438" r="3" data-align="center" />
+    <circle id="caption-r3" cx="534" cy="438" r="3" data-align="center" />
+    <circle id="stick-dpad" cx="412" cy="412" r="30" />
+  </g>
+</svg>

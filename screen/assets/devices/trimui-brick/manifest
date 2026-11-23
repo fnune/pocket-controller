@@ -1,0 +1,55 @@
+image body 296 52
+image press-x 596 366
+image turbo-x 596 366
+image turbo-press-x 596 366
+image press-a 626 396
+image turbo-a 626 396
+image turbo-press-a 626 396
+image press-b 596 426
+image turbo-b 596 426
+image turbo-press-b 596 426
+image press-y 566 396
+image turbo-y 566 396
+image turbo-press-y 566 396
+image press-l1 348 68
+image turbo-l1 348 68
+image turbo-press-l1 348 68
+image press-l2 416 68
+image turbo-l2 416 68
+image turbo-press-l2 416 68
+image press-r2 548 68
+image turbo-r2 548 68
+image turbo-press-r2 548 68
+image press-r1 616 68
+image turbo-r1 616 68
+image turbo-press-r1 616 68
+image press-dpad-up 403 377
+image press-dpad-down 403 425
+image press-dpad-left 377 403
+image press-dpad-right 425 403
+image press-menu 442 473
+image press-select 492 473
+image press-start 542 473
+image press-l3 478 407
+image press-r3 522 407
+image press-volume-up 324 160
+image press-volume-down 324 197
+image fn-on 692 160
+image stick-well 369 369
+image stick-well-l 388 388
+image stick-well-r 388 388
+image stick-thumb 402 402
+image choice 176 368
+image leaders 296 52
+anchor label-turbo-shoulders-left 290 58 right
+anchor label-turbo-shoulders-right 734 58 left
+anchor label-dpad-mode-dpad 286 376 right
+anchor label-dpad-mode-left-stick 286 416 right
+anchor label-dpad-mode-right-stick 286 456 right
+anchor label-turbo-face 734 412 left
+anchor label-menu 412 526 right
+anchor label-start 612 526 left
+anchor caption-dpad-mode 290 340 right
+anchor caption-l3 490 438 center
+anchor caption-r3 534 438 center
+stick dpad 412 412 30

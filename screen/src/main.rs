@@ -1,14 +1,17 @@
+mod device;
 mod layout;
 mod sdl;
 
 use std::io::BufRead;
 use std::process::ExitCode;
 
+use device::Device;
 use layout::{Align, Op, Paint, Role};
 use pocket_controller::frame::FrameReader;
 use sdl::{Color, Font, Rect, Screen, Sdl};
 
-const USAGE: &str = "usage: pocket-controller-screen --font PATH [--assets DIR]";
+const USAGE: &str = "usage: pocket-controller-screen --font PATH [--assets DIR] [--device NAME]";
+const DEFAULT_DEVICE: &str = "trimui-brick";
 const BUFFERS: usize = 2;
 const LINE_SPACING_PERCENT: i32 = 115;
 
@@ -83,24 +86,37 @@ fn wrap(screen: &Screen, font: *mut Font, text: &str, max_width: i32) -> Vec<Str
 }
 
 struct Images {
-    loaded: std::collections::HashMap<&'static str, *mut sdl::Surface>,
+    loaded: std::collections::HashMap<String, *mut sdl::Surface>,
 }
 
 impl Images {
-    fn load(sdl: &Sdl, directory: Option<&str>, names: &[&'static str]) -> Self {
+    fn load<'n>(sdl: &Sdl, directory: &str, names: impl IntoIterator<Item = &'n str>) -> Self {
         let mut loaded = std::collections::HashMap::new();
-        if let Some(directory) = directory {
-            for name in names {
-                match sdl.load_image(&format!("{directory}/{name}.png")) {
-                    Ok(image) => {
-                        loaded.insert(*name, image);
-                    }
-                    Err(error) => eprintln!("pocket-controller-screen: {error}"),
+        for name in names {
+            match sdl.load_image(&format!("{directory}/{name}.png")) {
+                Ok(image) => {
+                    loaded.insert(name.to_string(), image);
                 }
+                Err(error) => eprintln!("pocket-controller-screen: {error}"),
             }
         }
         Self { loaded }
     }
+
+    fn extend(&mut self, other: Images) {
+        self.loaded.extend(other.loaded);
+    }
+}
+
+fn load_device(assets: &str, name: &str) -> Device {
+    let path = format!("{assets}/devices/{name}/manifest");
+    let parsed = std::fs::read_to_string(&path)
+        .map_err(|error| format!("could not read {path}: {error}"))
+        .and_then(|text| Device::parse(&text).map_err(|error| format!("{path}: {error}")));
+    parsed.unwrap_or_else(|error| {
+        eprintln!("pocket-controller-screen: {error}");
+        Device::default()
+    })
 }
 
 fn draw(screen: &Screen, fonts: &Fonts, images: &Images, ops: &[Op]) {
@@ -157,11 +173,12 @@ fn draw(screen: &Screen, fonts: &Fonts, images: &Images, ops: &[Op]) {
 
 fn run() -> Result<(), String> {
     let mut arguments = std::env::args().skip(1);
-    let (mut font_path, mut assets) = (None, None);
+    let (mut font_path, mut assets, mut device_name) = (None, None, None);
     while let Some(argument) = arguments.next() {
         match (argument.as_str(), arguments.next()) {
             ("--font", Some(path)) => font_path = Some(path),
             ("--assets", Some(path)) => assets = Some(path),
+            ("--device", Some(name)) => device_name = Some(name),
             _ => return Err(USAGE.to_string()),
         }
     }
@@ -170,7 +187,25 @@ fn run() -> Result<(), String> {
     let screen = sdl.open_screen()?;
     let (width, height) = screen.size();
     let fonts = Fonts::open(&sdl, &font_path, width)?;
-    let images = Images::load(&sdl, assets.as_deref(), layout::IMAGES);
+    let device_name = device_name.unwrap_or_else(|| DEFAULT_DEVICE.to_string());
+    let (device, images) = match assets.as_deref() {
+        Some(assets) => {
+            let device = load_device(assets, &device_name);
+            let mut images = Images::load(&sdl, assets, layout::IMAGES.iter().copied());
+            images.extend(Images::load(
+                &sdl,
+                &format!("{assets}/devices/{device_name}"),
+                device.image_names(),
+            ));
+            (device, images)
+        }
+        None => (
+            Device::default(),
+            Images {
+                loaded: std::collections::HashMap::new(),
+            },
+        ),
+    };
     let mut reader = FrameReader::new();
     for line in std::io::stdin().lock().lines() {
         let line = line.map_err(|error| format!("could not read frames: {error}"))?;
@@ -181,7 +216,7 @@ fn run() -> Result<(), String> {
                     &screen,
                     &fonts,
                     &images,
-                    &layout::layout(&frame, width, height, &measure),
+                    &layout::layout(&frame, width, height, &measure, &device),
                 );
             }
             Some(None) => eprintln!("pocket-controller-screen: skipped a frame it could not read"),
