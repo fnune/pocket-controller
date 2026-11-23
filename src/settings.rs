@@ -32,9 +32,9 @@ impl ScreenWhilePlaying {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::DimAfter => "Dim after 30 s",
-            Self::AlwaysOn => "Always on",
-            Self::OffAfter => "Off after 30 s",
+            Self::DimAfter => "Dim",
+            Self::AlwaysOn => "Stay on",
+            Self::OffAfter => "Turn off",
         }
     }
 }
@@ -107,9 +107,9 @@ pub fn face_label(face: FaceLayout) -> &'static str {
 
 pub fn face_detail(face: FaceLayout) -> &'static str {
     match face {
-        FaceLayout::Label => "A is on the right: the button labelled A sends A",
+        FaceLayout::Label => "A is on the right: the button labelled A sends A.",
         FaceLayout::Position => {
-            "A is at the bottom: the bottom button sends A, whatever is printed on it"
+            "A is at the bottom: the bottom button sends A, whatever is printed on it."
         }
     }
 }
@@ -120,41 +120,41 @@ pub fn rumble_label(on: bool) -> &'static str {
 
 pub fn rumble_detail(on: bool) -> &'static str {
     if on {
-        "The handheld vibrates when a game asks"
+        "The handheld vibrates when a game asks."
     } else {
-        "The handheld never vibrates"
+        "The handheld never vibrates."
     }
 }
 
 pub fn screen_detail(screen: ScreenWhilePlaying) -> &'static str {
     match screen {
-        ScreenWhilePlaying::DimAfter => {
-            "Dims 30 s after a computer connects. Hold MENU or press POWER to wake it"
-        }
-        ScreenWhilePlaying::AlwaysOn => "Stays at full brightness while connected",
+        ScreenWhilePlaying::DimAfter => "Dims 30 s after a computer connects.",
+        ScreenWhilePlaying::AlwaysOn => "Stays at full brightness while connected.",
         ScreenWhilePlaying::OffAfter => {
-            "Turns off 30 s after a computer connects. Hold MENU or press POWER to wake it"
+            "Turns off 30 s after a computer connects. The controller keeps working."
         }
     }
 }
 
 pub fn mode_detail(mode: Mode) -> &'static str {
     match mode {
-        Mode::Automatic => "Xbox-style when the computer supports it, otherwise Generic",
-        Mode::Xbox => "Emulates an Xbox 360 controller. Linux and Steam recognise it without setup",
+        Mode::Automatic => "Xbox-style when the computer supports it, otherwise Generic.",
+        Mode::Xbox => {
+            "Emulates an Xbox 360 controller. Linux and Steam recognise it without setup."
+        }
         Mode::Gamepad => {
-            "A standard USB gamepad that works with more devices but may need button mapping"
+            "A standard USB gamepad that works with more devices but may need button mapping."
         }
     }
 }
 
 pub const RUMBLE_UNAVAILABLE: &str = "Not available in Generic mode";
 pub const RUMBLE_UNAVAILABLE_DETAIL: &str =
-    "Generic mode is a plain USB gamepad, which has no way to receive rumble";
+    "Generic mode is a plain USB gamepad, which has no way to receive rumble.";
 pub const DEBUG_VALUE: &str = "What the computer receives";
 pub const DEBUG_DETAIL: &str =
-    "Shows what the computer receives, live. Buttons still reach the computer while it is open";
-pub const MODE_CHANGE_WARNING: &str = "The computer will see the controller unplug and replug";
+    "Shows what the computer receives, live. Buttons still reach the computer while it is open.";
+pub const MODE_CHANGE_WARNING: &str = "The computer will see the controller unplug and replug.";
 
 pub fn rumble_available(kind: Kind) -> bool {
     kind == Kind::Xbox

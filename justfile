@@ -7,7 +7,7 @@ pak := "dist/nextui/Pocket Controller.pak"
 stock_app := "dist/trimui-stock/Apps/PocketController"
 brick := env("POCKET_CONTROLLER_HOST", "root@192.168.1.92")
 ssh_key := env("POCKET_CONTROLLER_SSH_KEY", home_directory() / ".ssh/id_ed25519_brick")
-ssh_options := "-i " + ssh_key + " -o BatchMode=yes -o IdentitiesOnly=yes -o LogLevel=ERROR"
+ssh_options := "-i " + ssh_key + " -o BatchMode=yes -o IdentitiesOnly=yes -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=3"
 
 default:
     @just --list

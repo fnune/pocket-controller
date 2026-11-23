@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+<circle cx="70" cy="24" r="22" fill="#2b3139" stroke="#999999" stroke-width="2"/>
+<text x="70" y="32.3" text-anchor="middle" font-size="22" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">X</text>
+<circle cx="116" cy="70" r="22" fill="#2b3139" stroke="#999999" stroke-width="2"/>
+<text x="116" y="78.3" text-anchor="middle" font-size="22" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">A</text>
+<circle cx="70" cy="116" r="22" fill="#2b3139" stroke="#999999" stroke-width="2"/>
+<text x="70" y="124.3" text-anchor="middle" font-size="22" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">B</text>
+<circle cx="24" cy="70" r="22" fill="#2b3139" stroke="#999999" stroke-width="2"/>
+<text x="24" y="78.3" text-anchor="middle" font-size="22" font-family="'Rounded Mplus 1c Bold'" font-weight="bold" fill="#ffffff">Y</text>
+</svg>

@@ -1,4 +1,5 @@
 use super::*;
+use pocket_controller::layer::FaceLayout;
 use pocket_controller::settings::{
     DEBUG_DETAIL, DEBUG_VALUE, FACE_VALUES, MODE_CHANGE_WARNING, MODE_VALUES, RUMBLE_UNAVAILABLE,
     RUMBLE_UNAVAILABLE_DETAIL, RUMBLE_VALUES, Row, ScreenWhilePlaying, SettingsView, face_detail,
@@ -31,6 +32,11 @@ pub(super) const CHEVRON: (i32, i32) = (16, 24);
 pub(super) const DETAIL_GAP: i32 = 56;
 pub(super) const DETAIL_LINE_HEIGHT: i32 = 28;
 pub(super) const WARNING_GAP: i32 = 16;
+pub(super) const EXTRA_GAP: i32 = 20;
+pub(super) const FACE_DIAGRAM: i32 = 140;
+pub(super) const FACE_CAPTION: &str = "What the computer receives";
+pub(super) const KEY_PILL: (i32, i32) = (52, 32);
+pub(super) const KEY_TEXT_GAP: i32 = 10;
 
 pub(super) fn mode_glyph(mode: Mode, selected: bool) -> &'static str {
     match (mode, selected) {
@@ -246,11 +252,63 @@ fn panel(canvas: &mut Canvas, view: &SettingsView) {
         canvas.text(Role::Detail, &line, text_left, y, Align::Left, Paint::Text);
         y += DETAIL_LINE_HEIGHT;
     }
+    match view.cursor {
+        Row::Face => {
+            let top = y - DETAIL_LINE_HEIGHT / 2 + EXTRA_GAP;
+            let diagram = match view.settings.face {
+                FaceLayout::Label => "face-nintendo",
+                FaceLayout::Position => "face-xbox",
+            };
+            let center = PANEL_LEFT + PANEL_WIDTH / 2;
+            canvas.image(diagram, center - FACE_DIAGRAM / 2, top);
+            canvas.text(
+                Role::Value,
+                FACE_CAPTION,
+                center,
+                top + FACE_DIAGRAM + EXTRA_GAP,
+                Align::Center,
+                Paint::Muted,
+            );
+        }
+        Row::Screen if view.settings.screen != ScreenWhilePlaying::AlwaysOn => {
+            wake_keys(canvas, y + EXTRA_GAP);
+        }
+        _ => {}
+    }
     if view.mode_change_warning() {
         y += WARNING_GAP;
         for line in wrap_to_width(canvas, Role::Detail, MODE_CHANGE_WARNING, PANEL_TEXT_WIDTH) {
             canvas.text(Role::Detail, &line, text_left, y, Align::Left, Paint::Muted);
             y += DETAIL_LINE_HEIGHT;
+        }
+    }
+}
+
+enum Piece {
+    Words(&'static str),
+    Key(&'static str),
+}
+
+const WAKE_HINT: [Piece; 4] = [
+    Piece::Words("To wake it, hold"),
+    Piece::Key("key-menu"),
+    Piece::Words("or press"),
+    Piece::Key("key-power"),
+];
+
+fn wake_keys(canvas: &mut Canvas, y: i32) {
+    let (pill_width, pill_height) = KEY_PILL;
+    let mut x = PANEL_LEFT + PANEL_PADDING;
+    for piece in &WAKE_HINT {
+        match piece {
+            Piece::Words(words) => {
+                canvas.text(Role::Detail, words, x, y, Align::Left, Paint::Text);
+                x += canvas.design_width_of(Role::Detail, words) + KEY_TEXT_GAP;
+            }
+            Piece::Key(key) => {
+                canvas.image(key, x, y - pill_height / 2);
+                x += pill_width + KEY_TEXT_GAP;
+            }
         }
     }
 }

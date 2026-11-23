@@ -111,6 +111,10 @@ pub const IMAGES: &[&str] = &[
     "btn-leftright",
     "chevron-left",
     "chevron-right",
+    "face-nintendo",
+    "face-xbox",
+    "key-menu",
+    "key-power",
 ];
 const QUIT_HINT: &str = "Hold to quit";
 const SHORTCUTS_HINT: &str = "Hold for shortcuts";

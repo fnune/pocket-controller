@@ -10,7 +10,7 @@ What pocket-controller shows on the handheld's screen and how it draws it. Writt
 - Navigation while disconnected: A settings, X debug, Y mode, B quit, and MENU + START also opens settings. While connected, MENU + START opens a captured settings overlay (with a Debug row). No other on-screen navigation exists while connected.
 - Holding MENU shows a chord cheat sheet for as long as it is held, so chords can be learned on the device. It is not a menu.
 - The timed hold (the quit chord only) shows a progress bar with what will happen, on the waiting and connected views and over a dimmed screen.
-- While playing the screen dims after 30 s by default. `Off after 30 s` and `Always on` are options. The helper never draws black to save power; the backlight does it.
+- While playing the screen dims after 30 s by default. `Turn off` and `Stay on` are options. The helper never draws black to save power; the backlight does it.
 - A brightness bar shows for about 1 s on MENU plus volume, even with the overlay closed and on a dimmed screen.
 
 ## Facts from the sources
@@ -317,7 +317,7 @@ Style follows NextUI's own bar (**Unverified**: its exact look). The Brightness 
 
 ### Screen dim and off
 
-Default `Dim after 30 s` while connected. Other values: `Off after 30 s` and `Always on`.
+Default `Dim` 30 s after a computer connects. Other values: `Turn off` and `Stay on`.
 
 - Brightness is a session value. On start `Backlight` records the original level and writes it to the recovery file. The chord and the overlay change the session value. Dim and off apply on top of it: dim is `min(session, DIM_RAW)` (a starting value of 16 raw, feel **Unverified**) and off is 0.
 - Restore the recorded original on every exit path and in `pocket-controller recover`, which is already the rule for `Backlight`.

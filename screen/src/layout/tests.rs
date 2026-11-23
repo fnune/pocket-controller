@@ -567,7 +567,7 @@ fn the_panel_shows_every_choice_of_the_cursor_row_and_highlights_one() {
     assert!(shown.contains(&"mode-auto-48-off") && shown.contains(&"mode-xbox-48-off"));
     assert!(shown.contains(&"chevron-left") && !shown.contains(&"chevron-right"));
     let screen_row = texts(&draw_overlay(Some(settings_view(Row::Screen)), None, None));
-    for label in ["Dim after 30 s", "Always on", "Off after 30 s"] {
+    for label in ["Dim", "Stay on", "Turn off"] {
         assert!(screen_row.contains(&label.to_string()), "{label}");
     }
 }
@@ -646,4 +646,69 @@ fn the_debug_view_names_what_the_computer_receives_beside_the_live_drawing() {
 fn the_quit_hold_still_shows_over_settings() {
     let ops = draw_overlay(Some(settings_view(Row::Face)), None, Some(50));
     assert!(texts(&ops).contains(&"Keep holding to quit".to_string()));
+}
+
+#[test]
+fn every_choice_fits_inside_its_card() {
+    for row in Row::ALL {
+        let ops = draw_overlay(Some(settings_view(row)), None, None);
+        let cards: Vec<(i32, i32)> = ops
+            .iter()
+            .filter_map(|op| match op {
+                Op::Fill {
+                    x,
+                    y,
+                    w,
+                    paint: Paint::Card | Paint::Text,
+                    ..
+                } if *y == CARDS_TOP && *x >= PANEL_LEFT => Some((*x, *w)),
+                _ => None,
+            })
+            .collect();
+        for op in &ops {
+            if let Op::Text {
+                role: Role::Detail,
+                text,
+                x,
+                align: Align::Center,
+                ..
+            } = op
+            {
+                let half = fake_measure(Role::Detail, text) / 2;
+                let inside = cards.iter().any(|(left, width)| {
+                    let padding = CARD_RADIUS - 12;
+                    *x - half >= *left - padding && *x + half <= left + width + padding
+                });
+                assert!(inside, "{row:?}: {text:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_face_row_draws_what_the_computer_receives() {
+    let mut view = settings_view(Row::Face);
+    assert!(images(&draw_overlay(Some(view), None, None)).contains(&"face-nintendo"));
+    view.settings.face = pocket_controller::layer::FaceLayout::Position;
+    assert!(images(&draw_overlay(Some(view), None, None)).contains(&"face-xbox"));
+}
+
+#[test]
+fn a_dark_screen_setting_shows_the_keys_that_wake_it() {
+    use pocket_controller::settings::ScreenWhilePlaying;
+    let mut view = settings_view(Row::Screen);
+    for (screen, shown) in [
+        (ScreenWhilePlaying::DimAfter, true),
+        (ScreenWhilePlaying::OffAfter, true),
+        (ScreenWhilePlaying::AlwaysOn, false),
+    ] {
+        view.settings.screen = screen;
+        let ops = draw_overlay(Some(view), None, None);
+        let keys = images(&ops);
+        assert_eq!(
+            keys.contains(&"key-menu") && keys.contains(&"key-power"),
+            shown,
+            "{screen:?}"
+        );
+    }
 }

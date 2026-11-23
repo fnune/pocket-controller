@@ -32,9 +32,9 @@ Tap MENU to send Guide. Hold MENU to see the shortcuts on screen:
 
 Open settings with MENU + START, or with A while no computer is connected:
 
-- Face buttons: match the letters (the button labelled A sends A, the default) or the positions (the bottom button sends A, like an Xbox pad).
+- Face buttons: Nintendo layout (the button labelled A sends A, the default) or Xbox layout (the bottom button sends A, whatever is printed on it).
 - Rumble: on or off.
-- Screen while playing: dim after 30 s (the default), always on, or off after 30 s.
+- Screen while playing: dim (the default), stay on, or turn off, 30 s after a computer connects.
 - Mode: Automatic, Xbox-style or Generic. Changing it while connected makes the computer see the controller unplug and replug.
 - Debug: what the computer receives, live.
 

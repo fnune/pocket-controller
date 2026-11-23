@@ -74,7 +74,7 @@ Timing: the MENU decision runs on `Tick` (100 ms resolution is enough). Turbo ne
 
 - Opening: MENU + START while connected or waiting, or A on the waiting screen. It replaces the mode picker, which was a second way to change the mode.
 - Input: settings take every button. The computer gets one neutral report on open and nothing else until they close. Up and down move, left and right change the value without wrapping, A on Debug opens the debug view, B or MENU + START closes. Buttons held at close are withheld until released. The quit hold still works.
-- Rows, in order: Face buttons (Match the letters, Match the positions), Rumble (On, Off; greyed in Generic mode), Screen while playing (Dim after 30 s, Always on, Off after 30 s), Mode (Automatic, Xbox-style, Generic), Debug. The screen shows "Pocket Controller" and the version.
+- Rows, in order: Face buttons (Nintendo layout, Xbox layout), Rumble (On, Off; greyed in Generic mode), Screen while playing (Dim, Stay on, Turn off, each 30 s after a computer connects), Mode (Automatic, Xbox-style, Generic), Debug. The screen shows "Pocket Controller" and the version.
 - Saving: each change applies and is saved at once, so a quit loses nothing. The mode is the exception: it applies on close, since a change may rebuild the USB controller. While connected, a mode that rebuilds it shows "The computer will see the controller unplug and replug".
 - Debug view: the USB link, the personality, the endpoint layout, whether the Xbox driver spoke, the last rumble level and the report the computer receives. Buttons reach the computer while it is open, so it doubles as a test. MENU + START closes it.
 - The screen wakes on open and never dims while the overlay is open. The dim timer restarts on close.
@@ -117,7 +117,7 @@ Timing: the MENU decision runs on `Tick` (100 ms resolution is enough). Turbo ne
 
 ### Screen while playing
 
-- Decision: default `Dim after 30 s`, the choice follows `screen.md`'s own argument that a black frame saves little while the backlight dominates, and a fully dark screen looks like a crash while every button goes to the computer. Other values: `Always on`, `Off after 30 s`. The dim level is a raw backlight value that the screen doc owns.
+- Decision: default `Dim`, the choice follows `screen.md`'s own argument that a black frame saves little while the backlight dominates, and a fully dark screen looks like a crash while every button goes to the computer. Other values: `Stay on`, `Turn off`. Dim and Turn off act 30 s after a computer connects. The dim level is a raw backlight value that the screen doc owns.
 - Mechanism and restore are owned by `screen.md` (`/dev/disp` ioctl 0x102, restore on every exit path and in `pocket-controller recover`).
 - Wake: overlay open, the cheat sheet, MENU + volume, POWER when dimmed, disconnect, error. Never ordinary buttons. A rumble burst does not wake it.
 - Xbox and HID: same.
