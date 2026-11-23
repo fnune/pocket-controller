@@ -7,8 +7,8 @@ So far it has only been tested on the TrimUI Brick running NextUI. Other devices
 | Connected | Shortcuts (hold MENU) |
 | --- | --- |
 | ![Connected as Xbox-style, with the live handheld showing pressed buttons and turbo on A and R1](docs/screenshots/connected.png) | ![The shortcuts view, labelling every button's MENU chord](docs/screenshots/shortcuts.png) |
-| **D-pad as an analog stick** | **Mode picker** |
-| ![The D-pad drawn as a stick well, its thumb following the emulated stick](docs/screenshots/analog.png) | ![The mode picker with Automatic, Xbox-style and Generic](docs/screenshots/picker.png) |
+| **D-pad as an analog stick** | **Settings** |
+| ![The D-pad drawn as a stick well, its thumb following the emulated stick](docs/screenshots/analog.png) | ![Settings with the Mode row selected and its three choices beside the list](docs/screenshots/settings.png) |
 
 pocket-controller turns the handheld's USB port into a USB device through the kernel's gadget framework (configfs and FunctionFS) and forwards the built-in controller to it.
 
@@ -18,7 +18,7 @@ pocket-controller turns the handheld's USB port into a USB device through the ke
 - **Xbox-style**: emulates an Xbox 360 controller, with Microsoft's IDs and protocol. Linux (`xpad`) and Steam recognise it without setup.
 - **Generic**: a standard USB HID gamepad that most hosts accept without drivers, including Windows, macOS and Android. Games may need you to map its buttons once.
 
-Change the mode on the handheld's screen with Y before connecting. Quit by holding SELECT + START, pressing POWER, or pressing B while no computer is connected.
+Change the mode in settings. Quit by holding SELECT + START, pressing POWER, or pressing B while no computer is connected.
 
 ## Shortcuts
 
@@ -28,7 +28,15 @@ Tap MENU to send Guide. Hold MENU to see the shortcuts on screen:
 - MENU + START: settings.
 - MENU + up, left or right: the D-pad acts as the D-pad, the left analog stick or the right analog stick.
 
-The face buttons send what is printed on them: the button labelled A sends A.
+## Settings
+
+Open settings with MENU + START, or with A while no computer is connected:
+
+- Face buttons: match the letters (the button labelled A sends A, the default) or the positions (the bottom button sends A, like an Xbox pad).
+- Rumble: on or off.
+- Screen while playing: dim after 30 s (the default), always on, or off after 30 s.
+- Mode: Automatic, Xbox-style or Generic. Changing it while connected makes the computer see the controller unplug and replug.
+- Debug: what the computer receives, live.
 
 ## Supported devices
 

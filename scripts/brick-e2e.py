@@ -152,6 +152,56 @@ def gamepad_checks(node: str) -> None:
     expect("screen says connected as gamepad", "Connected as a generic gamepad" in screens(), screens())
 
 
+def hat(axis: int, value: int) -> None:
+    _ = brick(
+        f"/tmp/pocket-controller-inject {PAD} abs:{axis:#x}:{value} && sleep 0.1 && "
+        f"/tmp/pocket-controller-inject {PAD} abs:{axis:#x}:0"
+    )
+    time.sleep(0.1)
+
+
+def open_settings() -> None:
+    inject(f"key:{BTN_MODE:#x}:1", f"key:{BTN_START:#x}:1")
+    time.sleep(0.1)
+    inject(f"key:{BTN_START:#x}:0", f"key:{BTN_MODE:#x}:0")
+    time.sleep(0.3)
+
+
+def settings_scenario() -> None:
+    print("settings:")
+    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
+    start("xbox")
+    node = host_device("045e", "028e")
+    expect("laptop sees 045e:028e", node is not None)
+    if node:
+        time.sleep(1.0)
+        events = read_events(node, lambda: (open_settings(), press(PRINTED_A)()))
+        pressed = [event for event in events if event[0] == EV_KEY and event[2] == 1]
+        expect("settings keep buttons from the laptop", not pressed, str(events))
+        log = brick("cat /tmp/pocket-controller.log")
+        expect("settings open on the face buttons row", "cursor: Face" in log, log[-400:])
+        for _ in range(3):
+            hat(ABS_HAT0Y, 1)
+        hat(ABS_HAT0X, 1)
+        hat(ABS_HAT0X, 1)
+        log = brick("cat /tmp/pocket-controller.log")
+        expect("the mode row shows Generic before it applies", "mode: Gamepad, current_mode: Xbox" in log, log[-400:])
+        press(BTN_A)()
+        gamepad = host_device("1d6b", "0105")
+        expect("closing settings switches the laptop to Generic", gamepad is not None)
+        saved = brick("cat /tmp/pocket-controller-e2e-state/mode")
+        expect("the new mode is saved", saved.strip() == "gamepad", saved)
+        if gamepad:
+            time.sleep(1.0)
+            _ = read_events(gamepad, quit_with_chord, settle=0.3)
+    else:
+        _ = brick("kill -TERM $(pidof pocket-controller)")
+    time.sleep(1.0)
+    expect("pocket-controller quit", brick("pidof pocket-controller") == "", brick("tail -n 5 /tmp/pocket-controller.log"))
+    expect("ADB is given back", adb_is_back())
+    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
+
+
 def main() -> None:
     if "configured" not in brick("cat /sys/class/udc/*/state"):
         sys.exit("the Brick is not connected to this computer as a USB device (use its bottom port and a USB-A port here)")
@@ -164,6 +214,7 @@ def main() -> None:
     scenario("xbox", "045e", "028e", xbox_checks)
     scenario("gamepad", "1d6b", "0105", gamepad_checks)
     scenario("automatic", "045e", "028e", xbox_checks)
+    settings_scenario()
     print("all passed" if not failures else f"{len(failures)} failed: {', '.join(failures)}")
     sys.exit(1 if failures else 0)
 

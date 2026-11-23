@@ -26,7 +26,11 @@ fn device_layers() -> Vec<String> {
     }
     layers
 }
-use pocket_controller::control::SheetView;
+use pocket_controller::control::{DebugView, SheetView, UsbLink};
+use pocket_controller::settings::{
+    MODE_CHANGE_WARNING, RUMBLE_UNAVAILABLE, Row, Settings, SettingsView, mode_detail,
+};
+use pocket_controller::xinput::{EndpointBudget, State};
 
 const WIDTH: i32 = 1024;
 const HEIGHT: i32 = 768;
@@ -36,8 +40,8 @@ fn fake_measure(role: Role, text: &str) -> i32 {
         Role::Headline => 42,
         Role::Body => 30,
         Role::Small | Role::Hint => 24,
-        Role::PickerTitle => 26,
-        Role::PickerLine => 18,
+        Role::Detail => 20,
+        Role::Value => 18,
         Role::Tag => 16,
         Role::SheetLabel => 22,
         Role::Caption => 18,
@@ -46,24 +50,63 @@ fn fake_measure(role: Role, text: &str) -> i32 {
 }
 
 fn draw(screen: Screen, hold: Option<u8>, busy: Option<u8>) -> Vec<Op> {
-    draw_with_picker(screen, hold, busy, None)
-}
-
-fn draw_with_picker(
-    screen: Screen,
-    hold: Option<u8>,
-    busy: Option<u8>,
-    picker: Option<Mode>,
-) -> Vec<Op> {
     let frame = Frame {
         screen,
         hold,
         busy,
-        picker,
+        settings: None,
+        debug: None,
         sheet: None,
         live: None,
     };
     layout(&frame, WIDTH, HEIGHT, &fake_measure, &brick())
+}
+
+fn draw_overlay(
+    settings: Option<SettingsView>,
+    debug: Option<DebugView>,
+    hold: Option<u8>,
+) -> Vec<Op> {
+    let frame = Frame {
+        screen: Screen::Connected(Kind::Xbox),
+        hold,
+        busy: None,
+        settings,
+        debug,
+        sheet: None,
+        live: Some(LiveView {
+            buttons: xinput::B,
+            ..LiveView::default()
+        }),
+    };
+    layout(&frame, WIDTH, HEIGHT, &fake_measure, &brick())
+}
+
+fn settings_view(cursor: Row) -> SettingsView {
+    SettingsView {
+        cursor,
+        settings: Settings::default(),
+        mode: Mode::Gamepad,
+        current_mode: Mode::Xbox,
+        kind: Kind::Xbox,
+        connected: true,
+    }
+}
+
+fn debug_view() -> DebugView {
+    DebugView {
+        link: UsbLink::Configured,
+        kind: Kind::Xbox,
+        connected: true,
+        budget: Some(EndpointBudget::OneInterrupt),
+        xbox_driver: true,
+        rumble: 128,
+        sent: State {
+            buttons: xinput::A | xinput::DPAD_UP,
+            left_x: -32767,
+            ..State::default()
+        },
+    }
 }
 
 fn texts(ops: &[Op]) -> Vec<String> {
@@ -162,39 +205,8 @@ fn the_mode_chip_names_the_mode_with_one_word_and_its_glyph() {
             ops.iter()
                 .any(|op| matches!(op, Op::Image { name, .. } if *name == glyph))
         );
-        assert!(!texts(&ops).contains(&mode_description(mode).to_string()));
+        assert!(!texts(&ops).contains(&mode_detail(mode).to_string()));
     }
-}
-
-#[test]
-fn the_picker_lists_every_mode_and_highlights_only_the_selection() {
-    let ops = draw_with_picker(
-        Screen::Waiting(Mode::Automatic, Diagnosis::None),
-        None,
-        None,
-        Some(Mode::Xbox),
-    );
-    let shown = images(&ops);
-    assert!(shown.contains(&"mode-xbox-48-on"));
-    assert!(shown.contains(&"mode-auto-48-off") && shown.contains(&"mode-gamepad-48-off"));
-    let all = texts(&ops);
-    for mode in [Mode::Automatic, Mode::Xbox, Mode::Gamepad] {
-        assert!(all.contains(&mode.label().to_string()), "{mode:?}");
-    }
-    assert!(all.contains(&RECOMMENDED.to_string()));
-}
-
-#[test]
-fn the_picker_hides_the_chip_and_the_status_line() {
-    let ops = draw_with_picker(
-        Screen::Waiting(Mode::Automatic, Diagnosis::None),
-        None,
-        None,
-        Some(Mode::Automatic),
-    );
-    let shown = images(&ops);
-    assert!(!shown.contains(&"mode-auto") && !shown.contains(&"icon-waiting"));
-    assert!(!texts(&ops).contains(&waiting_lines(Diagnosis::None).0.to_string()));
 }
 
 fn draw_sheet(view: SheetView) -> Vec<Op> {
@@ -202,7 +214,8 @@ fn draw_sheet(view: SheetView) -> Vec<Op> {
         screen: Screen::Connected(Kind::Xbox),
         hold: None,
         busy: None,
-        picker: None,
+        settings: None,
+        debug: None,
         sheet: Some(view),
         live: None,
     };
@@ -250,7 +263,8 @@ fn draw_connected(live: LiveView) -> Vec<Op> {
         screen: Screen::Connected(Kind::Gamepad),
         hold: None,
         busy: None,
-        picker: None,
+        settings: None,
+        debug: None,
         sheet: None,
         live: Some(live),
     };
@@ -399,43 +413,14 @@ fn active_turbo_and_dpad_mode_are_named_under_the_headline() {
 }
 
 #[test]
-fn long_mode_descriptions_wrap_into_two_lines_that_fit_the_row() {
-    let ops = draw_with_picker(
-        Screen::Waiting(Mode::Automatic, Diagnosis::None),
-        None,
-        None,
-        Some(Mode::Gamepad),
-    );
-    let lines: Vec<String> = ops
-        .iter()
-        .filter_map(|op| match op {
-            Op::Text {
-                role: Role::PickerLine,
-                text,
-                ..
-            } => Some(text.clone()),
-            _ => None,
-        })
-        .collect();
-    assert!(lines.len() > 3, "{lines:?}");
-    for line in &lines {
-        assert!(
-            fake_measure(Role::PickerLine, line) <= PICKER_TEXT_WIDTH,
-            "{line:?}"
-        );
-    }
-    assert_eq!(lines.join(" ").matches("button mapping").count(), 1);
-}
-
-#[test]
 fn waiting_offers_only_the_buttons_that_work() {
     let all = texts(&draw(
         Screen::Waiting(Mode::Gamepad, Diagnosis::None),
         None,
         None,
     ));
-    assert!(all.contains(&"QUIT".to_string()) && all.contains(&"MODE".to_string()));
-    assert!(!all.contains(&"SETTINGS".to_string()));
+    assert!(all.contains(&"QUIT".to_string()) && all.contains(&"SETTINGS".to_string()));
+    assert!(!all.contains(&"MODE".to_string()));
 }
 
 #[test]
@@ -521,9 +506,22 @@ fn everything_fits_on_screen() {
         Screen::Waiting(Mode::Automatic, Diagnosis::NoComputer),
         Screen::Connected(Kind::Gamepad),
     ];
+    let mut drawings: Vec<(String, Vec<Op>)> = Vec::new();
     for screen in screens {
         for hold in [None, Some(100)] {
-            for op in draw(screen.clone(), hold, Some(1)) {
+            drawings.push((format!("{screen:?}"), draw(screen.clone(), hold, Some(1))));
+        }
+    }
+    for row in Row::ALL {
+        drawings.push((
+            format!("{row:?}"),
+            draw_overlay(Some(settings_view(row)), None, None),
+        ));
+    }
+    drawings.push(("debug".into(), draw_overlay(None, Some(debug_view()), None)));
+    for (screen, ops) in drawings {
+        {
+            for op in ops {
                 match op {
                     Op::Fill { x, y, w, h, .. } => {
                         assert!(
@@ -545,4 +543,107 @@ fn everything_fits_on_screen() {
             }
         }
     }
+}
+
+#[test]
+fn settings_list_every_row_with_its_value_and_the_version() {
+    let all = texts(&draw_overlay(Some(settings_view(Row::Face)), None, None));
+    for row in Row::ALL {
+        assert!(all.contains(&row_label(row).to_string()), "{row:?}");
+    }
+    assert!(all.contains(&"Nintendo layout".to_string()));
+    assert!(all.contains(&"Generic".to_string()), "the pending mode");
+    assert!(
+        all.iter()
+            .any(|text| text.starts_with("Pocket Controller "))
+    );
+}
+
+#[test]
+fn the_panel_shows_every_choice_of_the_cursor_row_and_highlights_one() {
+    let ops = draw_overlay(Some(settings_view(Row::Mode)), None, None);
+    let shown = images(&ops);
+    assert!(shown.contains(&"mode-gamepad-48-on"));
+    assert!(shown.contains(&"mode-auto-48-off") && shown.contains(&"mode-xbox-48-off"));
+    assert!(shown.contains(&"chevron-left") && !shown.contains(&"chevron-right"));
+    let screen_row = texts(&draw_overlay(Some(settings_view(Row::Screen)), None, None));
+    for label in ["Dim after 30 s", "Always on", "Off after 30 s"] {
+        assert!(screen_row.contains(&label.to_string()), "{label}");
+    }
+}
+
+#[test]
+fn a_mode_change_while_connected_warns_in_plain_text() {
+    let lines = texts(&draw_overlay(Some(settings_view(Row::Mode)), None, None)).join(" ");
+    assert!(lines.contains(MODE_CHANGE_WARNING), "{lines}");
+    let mut same = settings_view(Row::Mode);
+    same.mode = Mode::Xbox;
+    let lines = texts(&draw_overlay(Some(same), None, None)).join(" ");
+    assert!(!lines.contains(MODE_CHANGE_WARNING));
+}
+
+#[test]
+fn rumble_is_greyed_with_a_reason_in_generic_mode() {
+    let mut view = settings_view(Row::Rumble);
+    view.kind = Kind::Gamepad;
+    let ops = draw_overlay(Some(view), None, None);
+    assert!(ops.iter().any(|op| matches!(
+        op,
+        Op::Text { text, paint: Paint::Ink | Paint::InkMuted, .. } if text == RUMBLE_UNAVAILABLE
+    )));
+    assert!(!texts(&ops).contains(&"On".to_string()));
+}
+
+#[test]
+fn panel_text_wraps_inside_the_panel() {
+    for row in Row::ALL {
+        let ops = draw_overlay(Some(settings_view(row)), None, None);
+        for op in ops {
+            if let Op::Text {
+                role: Role::Detail,
+                text,
+                x,
+                align: Align::Left,
+                ..
+            } = op
+                && x >= PANEL_LEFT
+            {
+                assert!(
+                    x + fake_measure(Role::Detail, &text) <= PANEL_LEFT + PANEL_WIDTH,
+                    "{text:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_debug_row_offers_a_instead_of_change() {
+    let all = texts(&draw_overlay(Some(settings_view(Row::Debug)), None, None));
+    assert!(all.contains(&"OPEN".to_string()) && !all.contains(&"Change".to_string()));
+}
+
+#[test]
+fn the_debug_view_names_what_the_computer_receives_beside_the_live_drawing() {
+    let ops = draw_overlay(None, Some(debug_view()), None);
+    let all = texts(&ops);
+    for expected in [
+        "Configured",
+        "Xbox-style",
+        "Interrupt IN, bulk OUT",
+        "Seen",
+        "128 of 255",
+        "A  Up",
+        "X -32767   Y 0",
+    ] {
+        assert!(all.contains(&expected.to_string()), "{expected}: {all:?}");
+    }
+    assert!(placed(&ops, "body").iter().all(|(_, x, _)| *x > 500));
+    assert!(images(&ops).contains(&"press-a"));
+}
+
+#[test]
+fn the_quit_hold_still_shows_over_settings() {
+    let ops = draw_overlay(Some(settings_view(Row::Face)), None, Some(50));
+    assert!(texts(&ops).contains(&"Keep holding to quit".to_string()));
 }

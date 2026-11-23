@@ -16,7 +16,7 @@ screen_helper="$PAK_DIR/bin/arm64-gnu/pocket-controller-screen"
 font="$SDCARD_PATH/.system/res/font1.ttf"
 state_dir="$USERDATA_PATH/$PAK_NAME"
 
-set -- --state-dir "$state_dir" --dim
+set -- --state-dir "$state_dir"
 if [ -x "$screen_helper" ] && [ -f "$font" ]; then
     set -- "$@" --screen "$screen_helper" --font "$font" --assets "$PAK_DIR/assets"
 fi

@@ -3,7 +3,7 @@ use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
-use pocket_controller::control::{Action, Controller, Input, Kind, Mode, Screen, UsbLink};
+use pocket_controller::control::{Action, Controller, Input, Kind, Light, Mode, Screen, UsbLink};
 use pocket_controller::functionfs::{Session, SessionEvents};
 use pocket_controller::gadget::{self, Layout, PortLease};
 use pocket_controller::interrupt;
@@ -16,6 +16,7 @@ const TICK: Duration = Duration::from_millis(20);
 const SLOW_TICKS: u32 = 5;
 const NOT_ATTACHED: &str = "not attached";
 const DIM_LEVEL: u32 = 10;
+const OFF_LEVEL: u32 = 0;
 const TRIMUI_LAUNCHER: &str = "/usr/trimui/bin/MainUI";
 const SAVED_BRIGHTNESS: &str = "/tmp/pocket-controller.brightness";
 
@@ -27,11 +28,10 @@ struct Options {
     screen: Option<PathBuf>,
     font: Option<PathBuf>,
     assets: Option<PathBuf>,
-    backlight: bool,
     recover_only: bool,
 }
 
-const USAGE: &str = "usage: pocket-controller [recover] [--mode automatic|xbox|gamepad] [--state-dir PATH] [--screen PATH --font PATH [--assets DIR]] [--presenter PATH] [--dim]";
+const USAGE: &str = "usage: pocket-controller [recover] [--mode automatic|xbox|gamepad] [--state-dir PATH] [--screen PATH --font PATH [--assets DIR]] [--presenter PATH]";
 
 fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, String> {
     let mut options = Options::default();
@@ -54,7 +54,6 @@ fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, Str
             "--screen" => options.screen = Some(PathBuf::from(value("--screen")?)),
             "--font" => options.font = Some(PathBuf::from(value("--font")?)),
             "--assets" => options.assets = Some(PathBuf::from(value("--assets")?)),
-            "--dim" => options.backlight = true,
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
         }
@@ -111,6 +110,9 @@ impl Hardware {
         {
             state.save_endpoint_budget(session.budget());
         }
+        let _ = self
+            .events
+            .send((self.generation, Input::Endpoints(session.budget())));
         self.session = Some(session);
         Ok(())
     }
@@ -137,11 +139,24 @@ impl Hardware {
                 eprintln!("screen: {screen:?}");
                 self.show(screen);
             }
-            Action::Picker(selected) => {
+            Action::Settings(view) => {
+                eprintln!("settings: {view:?}");
                 if let Some(helper) = &mut self.helper
-                    && let Err(error) = helper.picker(selected)
+                    && let Err(error) = helper.settings(view)
                 {
                     self.helper_failed(&error);
+                }
+            }
+            Action::Debug(view) => {
+                if let Some(helper) = &mut self.helper
+                    && let Err(error) = helper.debug(view)
+                {
+                    self.helper_failed(&error);
+                }
+            }
+            Action::SaveSettings(settings) => {
+                if let Some(state) = &self.state {
+                    state.save_settings(settings);
                 }
             }
             Action::Busy(busy) => {
@@ -159,12 +174,12 @@ impl Hardware {
                     self.helper_failed(&error);
                 }
             }
-            Action::Dim(dimmed) => {
+            Action::Backlight(light) => {
                 if let Some(backlight) = &mut self.backlight {
-                    if dimmed {
-                        backlight.dim(DIM_LEVEL);
-                    } else {
-                        backlight.undim();
+                    match light {
+                        Light::Full => backlight.undim(),
+                        Light::Dim => backlight.dim(DIM_LEVEL),
+                        Light::Off => backlight.dim(OFF_LEVEL),
                     }
                 }
             }
@@ -389,7 +404,8 @@ fn run(options: Options) -> Result<(), String> {
             .map(PathBuf::from)
             .filter(|path| path.exists())
             .map(Motor::new),
-        backlight: (options.backlight && profile.sunxi_backlight)
+        backlight: profile
+            .sunxi_backlight
             .then(|| Backlight::new(PathBuf::from(SAVED_BRIGHTNESS))),
         state,
     };
@@ -411,12 +427,12 @@ fn run(options: Options) -> Result<(), String> {
         {
             eprintln!("the power button will not quit: {error}");
         }
-        let input = hardware
+        let saved = hardware
             .state
             .as_ref()
-            .map(StateDir::input_settings)
+            .map(StateDir::saved)
             .unwrap_or_default();
-        let (mut controller, actions) = Controller::with_input(mode, input, Instant::now());
+        let (mut controller, actions) = Controller::with_saved(mode, saved, Instant::now());
         for action in actions {
             hardware.apply(action)?;
         }

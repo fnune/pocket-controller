@@ -72,12 +72,13 @@ Timing: the MENU decision runs on `Tick` (100 ms resolution is enough). Turbo ne
 
 ### Overlay (settings and debug)
 
-- Behaviour: MENU + START opens it (offline, A or MENU + START). Up and down move, left and right change the value, A cycles two-value rows, B or MENU + START closes it. L1 and R1 are not used. Changes apply live and are saved on close. Held buttons at open are withheld until released after close.
-- Rows, in order: D-pad mode, Face buttons, Rumble, Screen while playing, Brightness (value, same as the chord), Volume keys, LEDs, Clear turbo, Debug, Mode (read-only while connected, editable offline), Defaults.
-- Wakes the screen to full brightness.
-- Xbox and HID: same, except where a row is greyed (below).
-- Offline: A opens settings (screen doc). The same list, without capture.
-- State machine: `overlay: Option<Cursor>`, `menu_since: Option<Instant>` and `sheet: bool` (set after 300 ms or at the first chord) in `Controller`, and a `hold` value with start time and duration for the quit hold.
+- Opening: MENU + START while connected or waiting, or A on the waiting screen. It replaces the mode picker, which was a second way to change the mode.
+- Input: settings take every button. The computer gets one neutral report on open and nothing else until they close. Up and down move, left and right change the value without wrapping, A on Debug opens the debug view, B or MENU + START closes. Buttons held at close are withheld until released. The quit hold still works.
+- Rows, in order: Face buttons (Match the letters, Match the positions), Rumble (On, Off; greyed in Generic mode), Screen while playing (Dim after 30 s, Always on, Off after 30 s), Mode (Automatic, Xbox-style, Generic), Debug. The screen shows "Pocket Controller" and the version.
+- Saving: each change applies and is saved at once, so a quit loses nothing. The mode is the exception: it applies on close, since a change may rebuild the USB controller. While connected, a mode that rebuilds it shows "The computer will see the controller unplug and replug".
+- Debug view: the USB link, the personality, the endpoint layout, whether the Xbox driver spoke, the last rumble level and the report the computer receives. Buttons reach the computer while it is open, so it doubles as a test. MENU + START closes it.
+- The screen wakes on open and never dims while the overlay is open. The dim timer restarts on close.
+- Code: `settings.rs` holds the rows, values and navigation (`Menu`), `control.rs` holds the overlay and applies the outcomes. Saved values live in the state directory as `face`, `rumble` and `screen`.
 
 ### Face button layout
 

@@ -48,19 +48,25 @@ pub(super) fn thumb_offset(buttons: u16, travel: i32) -> (i32, i32) {
 }
 
 impl Canvas<'_> {
-    fn layer(&mut self, device: &Device, name: &str) {
+    fn layer(&mut self, device: &Device, name: &str, shift: i32) {
         if let Some((x, y)) = device.image(name) {
-            self.image(name, x, y);
+            self.image(name, x + shift, y);
         }
     }
 }
 
-pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, labelled: bool) {
-    canvas.layer(device, "body");
+pub(super) fn handheld(
+    canvas: &mut Canvas,
+    device: &Device,
+    live: &LiveView,
+    labelled: bool,
+    shift: i32,
+) {
+    canvas.layer(device, "body", shift);
     let analog = live.dpad != DpadMode::Dpad;
     for (bit, name) in PLAIN_CONTROLS {
         if live.buttons & bit != 0 && !(analog && bit & DPAD_BUTTONS != 0) {
-            canvas.layer(device, name);
+            canvas.layer(device, name, shift);
         }
     }
     for (on, name) in [
@@ -69,7 +75,7 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
         (live.fn_switch, "fn-on"),
     ] {
         if on {
-            canvas.layer(device, name);
+            canvas.layer(device, name, shift);
         }
     }
     for shortcut in turbo_shortcuts() {
@@ -90,6 +96,7 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
         canvas.layer(
             device,
             &format!("{state}-{}", shortcut.printed.to_lowercase()),
+            shift,
         );
     }
     let badge = match live.dpad {
@@ -100,13 +107,13 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
     if let (Some(badge), Some(stick), Some((thumb_x, thumb_y))) =
         (badge, device.stick("dpad"), device.image("stick-thumb"))
     {
-        canvas.layer(device, "stick-well");
-        canvas.layer(device, badge);
+        canvas.layer(device, "stick-well", shift);
+        canvas.layer(device, badge, shift);
         let (dx, dy) = thumb_offset(live.buttons, stick.travel);
-        canvas.image("stick-thumb", thumb_x + dx, thumb_y + dy);
+        canvas.image("stick-thumb", thumb_x + dx + shift, thumb_y + dy);
     }
     if labelled {
-        canvas.layer(device, "leaders");
+        canvas.layer(device, "leaders", shift);
         let choice = for_dpad_mode(live.dpad);
         if let Some(row) = device.anchor(choice.anchor) {
             let label_width = canvas.design_width_of(Role::SheetLabel, choice.label);

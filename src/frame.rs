@@ -1,13 +1,15 @@
-use crate::control::{Diagnosis, Kind, LiveView, Mode, Screen, SheetView};
-use crate::layer::{DpadMode, Turbo};
-use crate::xinput;
+use crate::control::{DebugView, Diagnosis, Kind, LiveView, Mode, Screen, SheetView, UsbLink};
+use crate::layer::{DpadMode, FaceLayout, Turbo};
+use crate::settings::{Row, ScreenWhilePlaying, Settings, SettingsView};
+use crate::xinput::{self, EndpointBudget, State};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
     pub screen: Screen,
     pub hold: Option<u8>,
     pub busy: Option<u8>,
-    pub picker: Option<Mode>,
+    pub settings: Option<SettingsView>,
+    pub debug: Option<DebugView>,
     pub sheet: Option<SheetView>,
     pub live: Option<LiveView>,
 }
@@ -92,6 +94,102 @@ fn parse_live(text: &str) -> Option<LiveView> {
     })
 }
 
+fn flag(on: bool) -> &'static str {
+    if on { "1" } else { "0" }
+}
+
+fn parse_flag(text: Option<&str>) -> Option<bool> {
+    match text? {
+        "0" => Some(false),
+        "1" => Some(true),
+        _ => None,
+    }
+}
+
+fn serialize_settings(view: &SettingsView) -> String {
+    [
+        view.cursor.as_str(),
+        view.settings.face.as_str(),
+        flag(view.settings.rumble),
+        view.settings.screen.as_str(),
+        view.mode.as_str(),
+        view.current_mode.as_str(),
+        kind_name(view.kind),
+        flag(view.connected),
+    ]
+    .join(",")
+}
+
+fn parse_settings(text: &str) -> Option<SettingsView> {
+    let mut parts = text.split(',');
+    let view = SettingsView {
+        cursor: Row::parse(parts.next()?)?,
+        settings: Settings {
+            face: FaceLayout::parse(parts.next()?)?,
+            rumble: parse_flag(parts.next())?,
+            screen: ScreenWhilePlaying::parse(parts.next()?)?,
+        },
+        mode: Mode::parse(parts.next()?)?,
+        current_mode: Mode::parse(parts.next()?)?,
+        kind: parse_kind(parts.next()?)?,
+        connected: parse_flag(parts.next())?,
+    };
+    parts.next().is_none().then_some(view)
+}
+
+fn serialize_debug(view: &DebugView) -> String {
+    let sent = view.sent;
+    [
+        view.link.as_str().to_string(),
+        kind_name(view.kind).to_string(),
+        flag(view.connected).to_string(),
+        view.budget
+            .map_or("none", EndpointBudget::as_str)
+            .to_string(),
+        flag(view.xbox_driver).to_string(),
+        view.rumble.to_string(),
+        sent.buttons.to_string(),
+        sent.left_trigger.to_string(),
+        sent.right_trigger.to_string(),
+        sent.left_x.to_string(),
+        sent.left_y.to_string(),
+        sent.right_x.to_string(),
+        sent.right_y.to_string(),
+    ]
+    .join(",")
+}
+
+fn parse_debug(text: &str) -> Option<DebugView> {
+    let mut parts = text.split(',');
+    let link = UsbLink::parse(parts.next()?)?;
+    let kind = parse_kind(parts.next()?)?;
+    let connected = parse_flag(parts.next())?;
+    let budget = match parts.next()? {
+        "none" => None,
+        name => Some(EndpointBudget::parse(name)?),
+    };
+    let xbox_driver = parse_flag(parts.next())?;
+    let rumble = parts.next()?.parse().ok()?;
+    let sent = State {
+        buttons: parts.next()?.parse().ok()?,
+        left_trigger: parts.next()?.parse().ok()?,
+        right_trigger: parts.next()?.parse().ok()?,
+        left_x: parts.next()?.parse().ok()?,
+        left_y: parts.next()?.parse().ok()?,
+        right_x: parts.next()?.parse().ok()?,
+        right_y: parts.next()?.parse().ok()?,
+    };
+    parts.next().is_none().then_some(DebugView {
+        link,
+        kind,
+        connected,
+        budget,
+        xbox_driver,
+        rumble,
+        sent,
+    })
+}
+
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::Xbox => "xbox",
@@ -125,8 +223,11 @@ impl Frame {
         if let Some(phase) = self.busy {
             lines.push(format!("busy={phase}"));
         }
-        if let Some(selected) = self.picker {
-            lines.push(format!("picker={}", selected.as_str()));
+        if let Some(view) = &self.settings {
+            lines.push(format!("settings={}", serialize_settings(view)));
+        }
+        if let Some(view) = &self.debug {
+            lines.push(format!("debug={}", serialize_debug(view)));
         }
         if let Some(live) = &self.live {
             lines.push(format!(
@@ -160,7 +261,7 @@ impl Frame {
     pub fn parse<'a>(lines: impl IntoIterator<Item = &'a str>) -> Option<Self> {
         let (mut view, mut mode, mut diagnosis, mut kind, mut hold, mut busy) =
             (None, None, None, None, None, None);
-        let mut picker = None;
+        let (mut settings, mut debug) = (None, None);
         let mut sheet: Option<SheetView> = None;
         let mut live: Option<LiveView> = None;
         for line in lines {
@@ -179,7 +280,8 @@ impl Frame {
                     )
                 }
                 "busy" => busy = Some(value.parse::<u8>().ok()?),
-                "picker" => picker = Some(Mode::parse(value)?),
+                "settings" => settings = Some(parse_settings(value)?),
+                "debug" => debug = Some(parse_debug(value)?),
                 "live" => live = Some(parse_live(value)?),
                 "live-turbo" => live.as_mut()?.turbo = parse_turbo(value)?,
                 "live-dpad" => live.as_mut()?.dpad = DpadMode::parse(value)?,
@@ -199,7 +301,8 @@ impl Frame {
             screen,
             hold,
             busy,
-            picker,
+            settings,
+            debug,
             sheet,
             live,
         })
@@ -253,7 +356,8 @@ mod tests {
                 screen: Screen::Waiting(Mode::Automatic, Diagnosis::NoComputer),
                 hold: None,
                 busy: None,
-                picker: None,
+                settings: None,
+                debug: None,
                 sheet: None,
                 live: None,
             },
@@ -261,7 +365,8 @@ mod tests {
                 screen: Screen::Connected(Kind::Xbox),
                 hold: Some(35),
                 busy: None,
-                picker: None,
+                settings: None,
+                debug: None,
                 sheet: None,
                 live: None,
             },
@@ -269,7 +374,8 @@ mod tests {
                 screen: Screen::Connected(Kind::Gamepad),
                 hold: Some(100),
                 busy: None,
-                picker: None,
+                settings: None,
+                debug: None,
                 sheet: None,
                 live: None,
             },
@@ -285,7 +391,8 @@ mod tests {
             screen: Screen::Connected(Kind::Xbox),
             hold: None,
             busy: None,
-            picker: None,
+            settings: None,
+            debug: None,
             sheet: None,
             live: None,
         }
@@ -294,7 +401,8 @@ mod tests {
                 screen: Screen::Connected(Kind::Xbox),
                 hold: None,
                 busy: None,
-                picker: None,
+                settings: None,
+                debug: None,
                 sheet: None,
                 live: None,
             }
@@ -313,7 +421,8 @@ mod tests {
                     screen: Screen::Connected(Kind::Xbox),
                     hold: None,
                     busy: None,
-                    picker: None,
+                    settings: None,
+                    debug: None,
                     sheet: None,
                     live: None,
                 })
@@ -327,7 +436,8 @@ mod tests {
             screen: Screen::Waiting(Mode::Xbox, Diagnosis::None),
             hold: None,
             busy: Some(2),
-            picker: None,
+            settings: None,
+            debug: None,
             sheet: None,
             live: None,
         };
@@ -335,12 +445,40 @@ mod tests {
     }
 
     #[test]
-    fn the_picker_selection_survives_the_trip() {
+    fn settings_and_debug_survive_the_trip() {
         let frame = Frame {
-            screen: Screen::Waiting(Mode::Automatic, Diagnosis::None),
+            screen: Screen::Connected(Kind::Xbox),
             hold: None,
             busy: None,
-            picker: Some(Mode::Gamepad),
+            settings: Some(SettingsView {
+                cursor: Row::Mode,
+                settings: Settings {
+                    face: FaceLayout::Position,
+                    rumble: false,
+                    screen: ScreenWhilePlaying::OffAfter,
+                },
+                mode: Mode::Gamepad,
+                current_mode: Mode::Automatic,
+                kind: Kind::Xbox,
+                connected: true,
+            }),
+            debug: Some(DebugView {
+                link: UsbLink::Configured,
+                kind: Kind::Xbox,
+                connected: true,
+                budget: Some(EndpointBudget::OneInterrupt),
+                xbox_driver: true,
+                rumble: 200,
+                sent: State {
+                    buttons: xinput::A,
+                    left_trigger: 255,
+                    right_trigger: 0,
+                    left_x: -32767,
+                    left_y: 23170,
+                    right_x: 0,
+                    right_y: 1,
+                },
+            }),
             sheet: None,
             live: None,
         };
@@ -353,7 +491,8 @@ mod tests {
             screen: Screen::Connected(Kind::Xbox),
             hold: None,
             busy: None,
-            picker: None,
+            settings: None,
+            debug: None,
             sheet: Some(SheetView {
                 note: Some("Turbo A: on".to_string()),
                 turbo: Turbo {

@@ -213,6 +213,19 @@ impl Layer {
         }
     }
 
+    pub fn absorb(&mut self, pad: Pad, now: Instant) {
+        self.withheld = pad.state.buttons & !xinput::GUIDE;
+        self.triggers_withheld = (
+            pad.state.left_trigger > TRIGGER_PRESSED_ABOVE,
+            pad.state.right_trigger > TRIGGER_PRESSED_ABOVE,
+        );
+        if pad.state.buttons & xinput::GUIDE != 0 {
+            self.menu_since = Some(now);
+            self.menu_chorded = true;
+        }
+        self.previous = pad;
+    }
+
     pub fn turbo_phase_on(&self, now: Instant) -> bool {
         (now.duration_since(self.epoch).as_millis() / TURBO_HALF_PERIOD.as_millis())
             .is_multiple_of(2)

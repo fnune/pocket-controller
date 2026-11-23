@@ -9,11 +9,12 @@ use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-use crate::control::{Input, InputSettings, LiveView, Mode, Screen, SheetView};
+use crate::control::{DebugView, Input, LiveView, Mode, Saved, Screen, SheetView};
 use crate::evdev::{self, AbsRange, Event, InputDevice, PadReader};
 use crate::frame::Frame;
 use crate::gadget::GadgetFs;
 use crate::layer::{DpadMode, FaceLayout};
+use crate::settings::{ScreenWhilePlaying, Settings, SettingsView};
 use crate::xinput::EndpointBudget;
 
 pub struct RealFs;
@@ -442,7 +443,8 @@ impl ScreenHelper {
                 screen,
                 hold: None,
                 busy: None,
-                picker: None,
+                settings: None,
+                debug: None,
                 sheet: None,
                 live: None,
             },
@@ -484,8 +486,13 @@ impl ScreenHelper {
         self.send()
     }
 
-    pub fn picker(&mut self, selected: Option<Mode>) -> io::Result<()> {
-        self.frame.picker = selected;
+    pub fn settings(&mut self, view: Option<SettingsView>) -> io::Result<()> {
+        self.frame.settings = view;
+        self.send()
+    }
+
+    pub fn debug(&mut self, view: Option<DebugView>) -> io::Result<()> {
+        self.frame.debug = view;
         self.send()
     }
 
@@ -610,17 +617,33 @@ impl StateDir {
         self.write("mode", mode.as_str());
     }
 
-    pub fn input_settings(&self) -> InputSettings {
-        InputSettings {
-            face: self
-                .read("face")
-                .and_then(|text| FaceLayout::parse(&text))
-                .unwrap_or_default(),
+    pub fn saved(&self) -> Saved {
+        let defaults = Settings::default();
+        Saved {
+            settings: Settings {
+                face: self
+                    .read("face")
+                    .and_then(|text| FaceLayout::parse(&text))
+                    .unwrap_or(defaults.face),
+                rumble: self
+                    .read("rumble")
+                    .map_or(defaults.rumble, |text| text.trim() != "off"),
+                screen: self
+                    .read("screen")
+                    .and_then(|text| ScreenWhilePlaying::parse(&text))
+                    .unwrap_or(defaults.screen),
+            },
             dpad: self
                 .read("dpad")
                 .and_then(|text| DpadMode::parse(&text))
                 .unwrap_or_default(),
         }
+    }
+
+    pub fn save_settings(&self, settings: Settings) {
+        self.write("face", settings.face.as_str());
+        self.write("rumble", if settings.rumble { "on" } else { "off" });
+        self.write("screen", settings.screen.as_str());
     }
 
     pub fn save_dpad_mode(&self, mode: DpadMode) {

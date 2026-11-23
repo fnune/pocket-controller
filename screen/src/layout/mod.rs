@@ -1,13 +1,15 @@
 mod connected;
+mod debug;
 mod handheld;
 mod hints;
-mod picker;
+mod settings;
 mod waiting;
 
 use connected::*;
+use debug::*;
 use handheld::*;
 use hints::*;
-use picker::*;
+use settings::*;
 use waiting::*;
 
 use crate::device::Device;
@@ -23,8 +25,8 @@ pub enum Role {
     Body,
     Small,
     Hint,
-    PickerTitle,
-    PickerLine,
+    Detail,
+    Value,
     Tag,
     SheetLabel,
     Caption,
@@ -39,6 +41,8 @@ pub enum Paint {
     Track,
     Ink,
     InkMuted,
+    Faint,
+    Card,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -103,6 +107,10 @@ pub const IMAGES: &[&str] = &[
     "btn-menu",
     "btn-select",
     "btn-start",
+    "btn-updown",
+    "btn-leftright",
+    "chevron-left",
+    "chevron-right",
 ];
 const QUIT_HINT: &str = "Hold to quit";
 const SHORTCUTS_HINT: &str = "Hold for shortcuts";
@@ -198,6 +206,15 @@ pub fn layout(
         measure,
     };
     let center = DESIGN_WIDTH / 2;
+    if let Some(view) = &frame.settings {
+        settings_screen(&mut canvas, view, frame.hold);
+        return canvas.ops;
+    }
+    if let Some(view) = &frame.debug {
+        let live = frame.live.unwrap_or_default();
+        debug_screen(&mut canvas, device, view, &live, frame.hold);
+        return canvas.ops;
+    }
     let design_height = canvas.height * DESIGN_WIDTH / canvas.width;
     if let Some(view) = &frame.sheet {
         let live = LiveView {
@@ -205,7 +222,7 @@ pub fn layout(
             dpad: view.dpad,
             ..frame.live.unwrap_or_default()
         };
-        handheld(&mut canvas, device, &live, true);
+        handheld(&mut canvas, device, &live, true, 0);
         if let Some(note) = &view.note {
             canvas.text(
                 Role::Body,
@@ -226,41 +243,36 @@ pub fn layout(
         Screen::Waiting(mode, diagnosis) => {
             canvas.image(link_image(*diagnosis), LINK_POSITION.0, LINK_POSITION.1);
             let (headline, instruction) = waiting_lines(*diagnosis);
-            match frame.picker {
-                Some(selected) => picker(&mut canvas, selected),
-                None => {
-                    let status = if *diagnosis == Diagnosis::None {
-                        Status::Waiting
-                    } else {
-                        Status::Warning
-                    };
-                    status_line(
-                        &mut canvas,
-                        status,
-                        headline,
-                        WAITING_HEADLINE_Y,
-                        frame.busy,
-                    );
-                    canvas.text(
-                        Role::Body,
-                        instruction,
-                        center,
-                        WAITING_INSTRUCTION_Y,
-                        Align::Center,
-                        Paint::Muted,
-                    );
-                    chip(&mut canvas, *mode);
-                }
-            }
+            let status = if *diagnosis == Diagnosis::None {
+                Status::Waiting
+            } else {
+                Status::Warning
+            };
+            status_line(
+                &mut canvas,
+                status,
+                headline,
+                WAITING_HEADLINE_Y,
+                frame.busy,
+            );
+            canvas.text(
+                Role::Body,
+                instruction,
+                center,
+                WAITING_INSTRUCTION_Y,
+                Align::Center,
+                Paint::Muted,
+            );
+            chip(&mut canvas, *mode);
             if frame.hold.is_none() {
                 let hints_y = design_height - 53;
-                hint(&mut canvas, "Y", "MODE", 40, hints_y);
-                hint(&mut canvas, "B", "QUIT", DESIGN_WIDTH - 180, hints_y);
+                hint(&mut canvas, "A", "SETTINGS", HINT_LEFT, hints_y);
+                hint_right(&mut canvas, "B", "QUIT", hints_y);
             }
         }
         Screen::Connected(kind) => {
             let live = frame.live.unwrap_or_default();
-            handheld(&mut canvas, device, &live, false);
+            handheld(&mut canvas, device, &live, false, 0);
             connected_headline(&mut canvas, *kind, CONNECTED_HEADLINE_Y);
             if let Some(options) = options_line(&live) {
                 canvas.text(

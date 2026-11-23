@@ -2,18 +2,21 @@ use std::time::{Duration, Instant};
 
 use crate::chord::ExitChord;
 use crate::evdev::{Extras, Pad};
-use crate::layer::{DpadMode, FaceLayout, Layer, LayerEvent, TRIGGER_PRESSED_ABOVE, Turbo};
-use crate::xinput::{self, State};
+use crate::layer::{DpadMode, Layer, LayerEvent, TRIGGER_PRESSED_ABOVE, Turbo};
+use crate::settings::{
+    Menu, MenuOutcome, PRINTED_A, PRINTED_B, ScreenWhilePlaying, Settings, SettingsView,
+    rumble_available,
+};
+use crate::xinput::{self, EndpointBudget, State};
 
 pub const XBOX_DRIVER_WAIT: Duration = Duration::from_secs(2);
 pub const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 pub const DIAGNOSIS_AFTER: Duration = Duration::from_secs(3);
 pub const DIM_AFTER: Duration = Duration::from_secs(30);
-pub const PICKER_CLOSES_AFTER: Duration = Duration::from_secs(3);
 
-pub const LOCAL_QUIT: u16 = xinput::A;
-pub const LOCAL_CHANGE_MODE: u16 = xinput::X;
+pub const LOCAL_QUIT: u16 = PRINTED_B;
+pub const LOCAL_OPEN_SETTINGS: u16 = PRINTED_A;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -48,15 +51,7 @@ impl Mode {
         }
     }
 
-    fn next(self) -> Self {
-        match self {
-            Self::Automatic => Self::Xbox,
-            Self::Xbox => Self::Gamepad,
-            Self::Gamepad => Self::Automatic,
-        }
-    }
-
-    fn first_kind(self) -> Kind {
+    pub fn first_kind(self) -> Kind {
         match self {
             Self::Automatic | Self::Xbox => Kind::Xbox,
             Self::Gamepad => Kind::Gamepad,
@@ -80,6 +75,28 @@ pub enum UsbLink {
 }
 
 impl UsbLink {
+    pub const ALL: [Self; 5] = [
+        Self::Unknown,
+        Self::NoPower,
+        Self::Powered,
+        Self::Enumerating,
+        Self::Configured,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::NoPower => "no-power",
+            Self::Powered => "powered",
+            Self::Enumerating => "enumerating",
+            Self::Configured => "configured",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|link| link.as_str() == text)
+    }
+
     pub fn classify(power: Option<bool>, controller_state: Option<&str>) -> Self {
         match controller_state.map(str::trim) {
             Some("configured" | "suspended") => Self::Configured,
@@ -128,6 +145,7 @@ pub enum Input {
     Rumble(u8),
     CableUnplugged,
     Link(UsbLink),
+    Endpoints(EndpointBudget),
     Tick,
 }
 
@@ -165,14 +183,16 @@ pub enum Action {
     Report(State),
     Show(Screen),
     Motor(bool),
-    Dim(bool),
+    Backlight(Light),
     Hold(Option<u8>),
     Busy(bool),
-    Picker(Option<Mode>),
     Sheet(Option<SheetView>),
     Live(LiveView),
+    Settings(Option<SettingsView>),
+    Debug(Option<DebugView>),
     SaveMode(Mode),
     SaveDpadMode(DpadMode),
+    SaveSettings(Settings),
     Exit,
 }
 
@@ -195,9 +215,33 @@ pub struct LiveView {
     pub dpad: DpadMode,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Light {
+    Full,
+    Dim,
+    Off,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DebugView {
+    pub link: UsbLink,
+    pub kind: Kind,
+    pub connected: bool,
+    pub budget: Option<EndpointBudget>,
+    pub xbox_driver: bool,
+    pub rumble: u8,
+    pub sent: State,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Overlay {
+    Settings(Menu),
+    Debug,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct InputSettings {
-    pub face: FaceLayout,
+pub struct Saved {
+    pub settings: Settings,
     pub dpad: DpadMode,
 }
 
@@ -218,7 +262,12 @@ pub struct Controller {
     dimmed: bool,
     hold: Option<u8>,
     showing_busy: bool,
-    picker: Option<(Mode, Instant)>,
+    overlay: Option<Overlay>,
+    settings: Settings,
+    settings_shown: Option<SettingsView>,
+    debug_shown: Option<DebugView>,
+    last_rumble: u8,
+    budget: Option<EndpointBudget>,
     layer: Layer,
     extras: Extras,
     last_sent: Option<State>,
@@ -229,10 +278,10 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(mode: Mode, now: Instant) -> (Self, Vec<Action>) {
-        Self::with_input(mode, InputSettings::default(), now)
+        Self::with_saved(mode, Saved::default(), now)
     }
 
-    pub fn with_input(mode: Mode, input: InputSettings, now: Instant) -> (Self, Vec<Action>) {
+    pub fn with_saved(mode: Mode, saved: Saved, now: Instant) -> (Self, Vec<Action>) {
         let kind = mode.first_kind();
         let controller = Self {
             mode,
@@ -250,8 +299,13 @@ impl Controller {
             dimmed: false,
             hold: None,
             showing_busy: false,
-            picker: None,
-            layer: Layer::new(input.face, input.dpad, now),
+            overlay: None,
+            settings: saved.settings,
+            settings_shown: None,
+            debug_shown: None,
+            last_rumble: 0,
+            budget: None,
+            layer: Layer::new(saved.settings.face, saved.dpad, now),
             extras: Extras::default(),
             last_sent: None,
             sheet: None,
@@ -374,14 +428,121 @@ impl Controller {
         }
     }
 
-    fn run_layer(&mut self, chord_sent: State, now: Instant, actions: &mut Vec<Action>) {
-        let output = self.layer.update(
-            Pad {
-                state: chord_sent,
-                extras: self.extras,
+    fn settings_open(&self) -> bool {
+        matches!(self.overlay, Some(Overlay::Settings(_)))
+    }
+
+    fn layer_input(&self, chord_sent: State) -> Pad {
+        Pad {
+            state: if self.settings_open() {
+                State::default()
+            } else {
+                chord_sent
             },
-            now,
-        );
+            extras: self.extras,
+        }
+    }
+
+    fn held_pad(&self) -> Pad {
+        Pad {
+            state: self.held,
+            extras: self.extras,
+        }
+    }
+
+    fn open_settings(&mut self, actions: &mut Vec<Action>) {
+        self.overlay = Some(Overlay::Settings(Menu::new(self.mode)));
+        self.wake(actions);
+    }
+
+    fn open_debug(&mut self, now: Instant) {
+        self.overlay = Some(Overlay::Debug);
+        self.layer.absorb(self.held_pad(), now);
+    }
+
+    fn close_overlay(&mut self, now: Instant, actions: &mut Vec<Action>) {
+        if let Some(Overlay::Settings(menu)) = self.overlay.take() {
+            self.layer.absorb(self.held_pad(), now);
+            self.apply_mode(menu.mode, actions);
+        }
+        if self.connected() {
+            self.dim_at = Some(now + DIM_AFTER);
+        }
+    }
+
+    fn settings_changed(&mut self, actions: &mut Vec<Action>) {
+        self.layer.face = self.settings.face;
+        if !self.settings.rumble {
+            actions.push(Action::Motor(false));
+        }
+        actions.push(Action::SaveSettings(self.settings));
+    }
+
+    fn navigate_settings(&mut self, pressed: u16, now: Instant, actions: &mut Vec<Action>) {
+        if pressed & xinput::START != 0 && self.held.buttons & xinput::GUIDE != 0 {
+            self.close_overlay(now, actions);
+            return;
+        }
+        for button in (0..16)
+            .map(|bit| 1u16 << bit)
+            .filter(|bit| pressed & bit != 0)
+        {
+            let Some(Overlay::Settings(mut menu)) = self.overlay else {
+                return;
+            };
+            let outcome = menu.press(button, &mut self.settings, self.kind);
+            self.overlay = Some(Overlay::Settings(menu));
+            match outcome {
+                MenuOutcome::Nothing | MenuOutcome::Moved => {}
+                MenuOutcome::Changed => self.settings_changed(actions),
+                MenuOutcome::Close => self.close_overlay(now, actions),
+                MenuOutcome::OpenDebug => self.open_debug(now),
+            }
+        }
+    }
+
+    fn settings_view(&self) -> Option<SettingsView> {
+        match self.overlay {
+            Some(Overlay::Settings(menu)) => Some(SettingsView {
+                cursor: menu.cursor,
+                settings: self.settings,
+                mode: menu.mode,
+                current_mode: self.mode,
+                kind: self.kind,
+                connected: self.connected(),
+            }),
+            _ => None,
+        }
+    }
+
+    fn debug_view(&self) -> Option<DebugView> {
+        (self.overlay == Some(Overlay::Debug)).then(|| DebugView {
+            link: self.link,
+            kind: self.kind,
+            connected: self.connected(),
+            budget: self.budget,
+            xbox_driver: self.xbox_driver_confirmed,
+            rumble: self.last_rumble,
+            sent: self.last_sent.unwrap_or_default(),
+        })
+    }
+
+    fn refresh_overlay(&mut self, actions: &mut Vec<Action>) {
+        let settings = self.settings_view();
+        if settings != self.settings_shown {
+            self.settings_shown = settings;
+            actions.push(Action::Settings(settings));
+        }
+        let debug = self.debug_view();
+        if debug != self.debug_shown {
+            self.debug_shown = debug;
+            actions.push(Action::Debug(debug));
+        }
+    }
+
+    fn run_layer(&mut self, chord_sent: State, now: Instant, actions: &mut Vec<Action>) {
+        let output = self.layer.update(self.layer_input(chord_sent), now);
+        let mut toggle_overlay = false;
         let mut sheet = self.sheet.clone();
         for event in output.events {
             match event {
@@ -413,12 +574,11 @@ impl Controller {
                         view.dpad = mode;
                     }
                 }
-                LayerEvent::OpenSettings => {
-                    if let Some(view) = sheet.as_mut() {
-                        view.note = Some("Settings are not available yet".to_string());
-                    }
-                }
+                LayerEvent::OpenSettings => toggle_overlay = true,
             }
+        }
+        if toggle_overlay {
+            sheet = None;
         }
         if sheet != self.sheet {
             self.sheet = sheet.clone();
@@ -428,11 +588,15 @@ impl Controller {
             self.last_sent = Some(output.sent);
             actions.push(Action::Report(output.sent));
         }
+        if toggle_overlay {
+            match self.overlay {
+                None => self.open_settings(actions),
+                Some(_) => self.close_overlay(now, actions),
+            }
+        }
     }
 
-    fn close_picker(&mut self, selected: Mode, actions: &mut Vec<Action>) {
-        self.picker = None;
-        actions.push(Action::Picker(None));
+    fn apply_mode(&mut self, selected: Mode, actions: &mut Vec<Action>) {
         if selected == self.mode {
             return;
         }
@@ -447,7 +611,7 @@ impl Controller {
     fn wake(&mut self, actions: &mut Vec<Action>) {
         if self.dimmed {
             self.dimmed = false;
-            actions.push(Action::Dim(false));
+            actions.push(Action::Backlight(Light::Full));
         }
     }
 
@@ -465,20 +629,24 @@ impl Controller {
                 }
                 self.show_hold(outcome.progress, &mut actions);
                 let menu_was_held = self.layer.menu_held();
+                let overlay_was_open = self.overlay.is_some();
+                let settings_were_open = self.settings_open();
                 self.run_layer(outcome.sent, now, &mut actions);
-                if !self.connected() && !menu_was_held && !self.layer.menu_held() {
-                    let pressed = pad.state.buttons & !previous.buttons;
+                let pressed = pad.state.buttons & !previous.buttons;
+                if settings_were_open {
+                    self.navigate_settings(pressed, now, &mut actions);
+                } else if !self.connected()
+                    && !overlay_was_open
+                    && self.overlay.is_none()
+                    && !menu_was_held
+                    && !self.layer.menu_held()
+                {
                     if pressed & LOCAL_QUIT != 0 {
                         actions.push(Action::Exit);
                         return actions;
                     }
-                    if pressed & LOCAL_CHANGE_MODE != 0 {
-                        let selected = match self.picker {
-                            Some((selected, _)) => selected.next(),
-                            None => self.mode,
-                        };
-                        self.picker = Some((selected, now + PICKER_CLOSES_AFTER));
-                        actions.insert(0, Action::Picker(Some(selected)));
+                    if pressed & LOCAL_OPEN_SETTINGS != 0 {
+                        self.open_settings(&mut actions);
                     }
                 }
             }
@@ -501,13 +669,7 @@ impl Controller {
                     self.xbox_driver_deadline = Some(now + XBOX_DRIVER_WAIT);
                 }
                 let sent = self.chord.update(self.held, now).sent;
-                let output = self.layer.update(
-                    Pad {
-                        state: sent,
-                        extras: self.extras,
-                    },
-                    now,
-                );
+                let output = self.layer.update(self.layer_input(sent), now);
                 self.last_sent = Some(output.sent);
                 actions.push(Action::Report(output.sent));
             }
@@ -528,7 +690,8 @@ impl Controller {
                 self.xbox_driver_deadline = None;
             }
             Input::Rumble(level) => {
-                if self.connected() {
+                self.last_rumble = level;
+                if self.connected() && self.settings.rumble && rumble_available(self.kind) {
                     actions.push(Action::Motor(level > 0));
                 }
             }
@@ -547,12 +710,8 @@ impl Controller {
                     self.link_since = now;
                 }
             }
+            Input::Endpoints(budget) => self.budget = Some(budget),
             Input::Tick => {
-                if let Some((selected, closes_at)) = self.picker
-                    && now >= closes_at
-                {
-                    self.close_picker(selected, &mut actions);
-                }
                 let outcome = self.chord.update(self.held, now);
                 if outcome.exit {
                     actions.push(Action::Exit);
@@ -566,9 +725,20 @@ impl Controller {
                 {
                     self.switch_to(Kind::Gamepad, &mut actions);
                 }
-                if self.connected() && !self.dimmed && self.dim_at.is_some_and(|at| now >= at) {
-                    self.dimmed = true;
-                    actions.push(Action::Dim(true));
+                if self.connected()
+                    && self.overlay.is_none()
+                    && !self.dimmed
+                    && self.dim_at.is_some_and(|at| now >= at)
+                {
+                    let light = match self.settings.screen {
+                        ScreenWhilePlaying::DimAfter => Some(Light::Dim),
+                        ScreenWhilePlaying::OffAfter => Some(Light::Off),
+                        ScreenWhilePlaying::AlwaysOn => None,
+                    };
+                    if let Some(light) = light {
+                        self.dimmed = true;
+                        actions.push(Action::Backlight(light));
+                    }
                 }
                 if !self.connected() && now.duration_since(self.idle_since) >= IDLE_LIMIT {
                     actions.push(Action::Exit);
@@ -578,6 +748,7 @@ impl Controller {
         }
         self.refresh_screen(now, &mut actions);
         self.refresh_live(now, &mut actions);
+        self.refresh_overlay(&mut actions);
         actions
     }
 }
@@ -586,6 +757,8 @@ impl Controller {
 mod tests {
     use super::*;
     use crate::chord::EXIT_CHORD;
+    use crate::layer::FaceLayout;
+    use crate::settings::Row;
 
     fn holding(buttons: u16) -> Input {
         Input::Pad(Pad {
@@ -833,78 +1006,218 @@ mod tests {
         );
     }
 
-    fn pick(controller: &mut Controller, at: Instant) -> Vec<Action> {
-        let actions = controller.handle(holding(LOCAL_CHANGE_MODE), at);
-        controller.handle(holding(0), at);
+    fn tap(controller: &mut Controller, buttons: u16, at: Instant) -> Vec<Action> {
+        let mut actions = controller.handle(holding(buttons), at);
+        actions.extend(controller.handle(holding(0), at + Duration::from_millis(30)));
         actions
     }
 
-    #[test]
-    fn the_first_press_opens_the_picker_on_the_current_mode_without_changing_it() {
-        let start = Instant::now();
-        let (mut controller, _) = Controller::new(Mode::Automatic, start);
-        let actions = pick(&mut controller, start);
-        assert_eq!(actions, vec![Action::Picker(Some(Mode::Automatic))]);
+    fn settings_shown(actions: &[Action]) -> Option<Option<SettingsView>> {
+        actions.iter().rev().find_map(|action| match action {
+            Action::Settings(view) => Some(*view),
+            _ => None,
+        })
+    }
+
+    fn reports(actions: &[Action]) -> Vec<State> {
+        actions
+            .iter()
+            .filter_map(|action| match action {
+                Action::Report(state) => Some(*state),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn open_with_menu_and_start(controller: &mut Controller, at: Instant) -> Vec<Action> {
+        controller.handle(holding(xinput::GUIDE), at);
+        let mut actions = controller.handle(holding(xinput::GUIDE | xinput::START), at);
+        actions.extend(controller.handle(holding(0), at + Duration::from_millis(30)));
+        actions
+    }
+
+    fn move_to(controller: &mut Controller, row: Row, at: Instant) {
+        let steps = Row::ALL.iter().position(|each| *each == row).unwrap_or(0);
+        for _ in 0..steps {
+            tap(controller, xinput::DPAD_DOWN, at);
+        }
     }
 
     #[test]
-    fn further_presses_move_the_selection_and_closing_applies_it() {
+    fn a_on_the_waiting_screen_opens_settings_on_the_first_row() {
         let start = Instant::now();
         let (mut controller, _) = Controller::new(Mode::Automatic, start);
-        pick(&mut controller, start);
-        assert_eq!(
-            pick(&mut controller, start + Duration::from_millis(500)),
-            vec![Action::Picker(Some(Mode::Xbox))]
-        );
-        assert_eq!(
-            pick(&mut controller, start + Duration::from_secs(1)),
-            vec![Action::Picker(Some(Mode::Gamepad))]
-        );
+        let view = settings_shown(&tap(&mut controller, PRINTED_A, start)).flatten();
+        assert_eq!(view.map(|view| view.cursor), Some(Row::Face));
+    }
+
+    #[test]
+    fn b_closes_settings_on_the_waiting_screen_without_quitting() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Automatic, start);
+        tap(&mut controller, PRINTED_A, start);
+        let actions = tap(&mut controller, PRINTED_B, start);
+        assert!(!actions.contains(&Action::Exit));
+        assert_eq!(settings_shown(&actions), Some(None));
+    }
+
+    #[test]
+    fn menu_and_start_open_settings_and_the_computer_gets_only_a_neutral_report() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        let actions = open_with_menu_and_start(&mut controller, start);
+        assert!(matches!(settings_shown(&actions), Some(Some(_))));
+        let actions = controller.handle(holding(xinput::Y | xinput::DPAD_DOWN), start);
         assert!(
-            controller
-                .handle(Input::Tick, start + Duration::from_millis(3900))
-                .is_empty()
+            reports(&actions)
+                .iter()
+                .all(|state| *state == State::default()),
+            "{actions:?}"
         );
-        let actions = controller.handle(Input::Tick, start + Duration::from_secs(4));
-        assert_eq!(
-            actions.first(),
-            Some(&Action::Show(Screen::Waiting(
-                Mode::Gamepad,
-                Diagnosis::None
-            )))
-        );
-        assert!(actions.contains(&Action::Picker(None)));
+        let actions = open_with_menu_and_start(&mut controller, start);
+        assert_eq!(settings_shown(&actions), Some(None));
+    }
+
+    #[test]
+    fn a_changed_setting_applies_and_is_saved_at_once() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Automatic, start);
+        tap(&mut controller, PRINTED_A, start);
+        let actions = tap(&mut controller, xinput::DPAD_RIGHT, start);
+        assert!(actions.contains(&Action::SaveSettings(Settings {
+            face: FaceLayout::Position,
+            ..Settings::default()
+        })));
+    }
+
+    #[test]
+    fn the_mode_applies_when_settings_close() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Automatic, start);
+        tap(&mut controller, PRINTED_A, start);
+        move_to(&mut controller, Row::Mode, start);
+        tap(&mut controller, xinput::DPAD_RIGHT, start);
+        let actions = tap(&mut controller, xinput::DPAD_RIGHT, start);
+        assert!(!actions.contains(&Action::SaveMode(Mode::Gamepad)));
+        let actions = tap(&mut controller, PRINTED_B, start);
         assert!(actions.contains(&Action::SaveMode(Mode::Gamepad)));
         assert_eq!(restarts(&actions), vec![Kind::Gamepad]);
     }
 
     #[test]
-    fn closing_on_the_same_mode_saves_and_rebuilds_nothing() {
-        let start = Instant::now();
-        let (mut controller, _) = Controller::new(Mode::Xbox, start);
-        pick(&mut controller, start);
-        let actions = controller.handle(Input::Tick, start + PICKER_CLOSES_AFTER);
-        assert_eq!(actions, vec![Action::Picker(None)]);
-    }
-
-    #[test]
-    fn picking_between_automatic_and_xbox_style_keeps_the_usb_controller() {
+    fn switching_between_automatic_and_xbox_style_keeps_the_usb_controller() {
         let start = Instant::now();
         let (mut controller, _) = Controller::new(Mode::Automatic, start);
-        pick(&mut controller, start);
-        pick(&mut controller, start);
-        let actions = controller.handle(Input::Tick, start + PICKER_CLOSES_AFTER);
+        tap(&mut controller, PRINTED_A, start);
+        move_to(&mut controller, Row::Mode, start);
+        tap(&mut controller, xinput::DPAD_RIGHT, start);
+        let actions = tap(&mut controller, PRINTED_B, start);
         assert!(actions.contains(&Action::SaveMode(Mode::Xbox)));
         assert!(restarts(&actions).is_empty());
     }
 
     #[test]
-    fn holding_the_button_does_not_cycle_modes_repeatedly() {
+    fn a_mode_that_rebuilds_the_controller_warns_while_connected() {
         let start = Instant::now();
-        let (mut controller, _) = Controller::new(Mode::Automatic, start);
-        controller.handle(holding(LOCAL_CHANGE_MODE), start);
-        let actions = controller.handle(holding(LOCAL_CHANGE_MODE | xinput::DPAD_UP), start);
-        assert!(actions.is_empty(), "{actions:?}");
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        open_with_menu_and_start(&mut controller, start);
+        move_to(&mut controller, Row::Mode, start);
+        let view = settings_shown(&tap(&mut controller, xinput::DPAD_RIGHT, start)).flatten();
+        assert!(view.is_some_and(|view| view.mode_change_warning()));
+    }
+
+    #[test]
+    fn buttons_held_when_settings_close_wait_for_release() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        open_with_menu_and_start(&mut controller, start);
+        controller.handle(holding(PRINTED_B | xinput::Y), start);
+        let actions = controller.handle(holding(PRINTED_B | xinput::Y), start);
+        assert!(reports(&actions).iter().all(|state| state.buttons == 0));
+        controller.handle(holding(xinput::Y), start);
+        controller.handle(holding(0), start);
+        let actions = controller.handle(holding(xinput::Y), start);
+        assert!(reports(&actions).iter().any(|state| state.buttons != 0));
+    }
+
+    #[test]
+    fn rumble_turned_off_keeps_the_motor_still() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        open_with_menu_and_start(&mut controller, start);
+        move_to(&mut controller, Row::Rumble, start);
+        tap(&mut controller, xinput::DPAD_RIGHT, start);
+        tap(&mut controller, PRINTED_B, start);
+        assert!(
+            !controller
+                .handle(Input::Rumble(255), start)
+                .contains(&Action::Motor(true))
+        );
+    }
+
+    #[test]
+    fn the_debug_row_opens_a_view_that_lets_buttons_through() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        open_with_menu_and_start(&mut controller, start);
+        move_to(&mut controller, Row::Debug, start);
+        let actions = tap(&mut controller, PRINTED_A, start);
+        assert_eq!(settings_shown(&actions), Some(None));
+        assert!(
+            actions
+                .iter()
+                .any(|action| matches!(action, Action::Debug(Some(_))))
+        );
+        let actions = controller.handle(holding(xinput::Y), start);
+        assert!(
+            reports(&actions)
+                .iter()
+                .any(|state| state.buttons == xinput::X)
+        );
+        controller.handle(holding(0), start);
+        let actions = open_with_menu_and_start(&mut controller, start);
+        assert!(actions.contains(&Action::Debug(None)));
+    }
+
+    #[test]
+    fn the_screen_setting_picks_dim_off_or_nothing() {
+        for (screen, expected) in [
+            (ScreenWhilePlaying::DimAfter, Some(Light::Dim)),
+            (ScreenWhilePlaying::OffAfter, Some(Light::Off)),
+            (ScreenWhilePlaying::AlwaysOn, None),
+        ] {
+            let start = Instant::now();
+            let saved = Saved {
+                settings: Settings {
+                    screen,
+                    ..Settings::default()
+                },
+                dpad: DpadMode::Dpad,
+            };
+            let (mut controller, _) = Controller::with_saved(Mode::Xbox, saved, start);
+            controller.handle(Input::HostEnabled, start);
+            let actions = controller.handle(Input::Tick, start + DIM_AFTER);
+            let light = actions.iter().find_map(|action| match action {
+                Action::Backlight(light) => Some(*light),
+                _ => None,
+            });
+            assert_eq!(light, expected, "{screen:?}");
+        }
+    }
+
+    #[test]
+    fn the_screen_never_dims_while_settings_are_open() {
+        let start = Instant::now();
+        let (mut controller, _) = Controller::new(Mode::Xbox, start);
+        controller.handle(Input::HostEnabled, start);
+        open_with_menu_and_start(&mut controller, start);
+        let actions = controller.handle(Input::Tick, start + DIM_AFTER * 3);
+        assert!(!actions.contains(&Action::Backlight(Light::Dim)));
     }
 
     #[test]
@@ -1020,17 +1333,6 @@ mod tests {
     }
 
     #[test]
-    fn opening_the_picker_comes_before_any_other_work() {
-        let start = Instant::now();
-        let (mut controller, _) = Controller::new(Mode::Xbox, start);
-        let actions = controller.handle(holding(LOCAL_CHANGE_MODE), start);
-        assert!(
-            matches!(actions.first(), Some(Action::Picker(_))),
-            "{actions:?}"
-        );
-    }
-
-    #[test]
     fn a_link_in_flux_keeps_the_screen_and_shows_loading_until_it_settles() {
         let start = Instant::now();
         let (mut controller, _) = Controller::new(Mode::Xbox, start);
@@ -1116,17 +1418,17 @@ mod tests {
         assert!(
             !controller
                 .handle(Input::Tick, start + Duration::from_secs(29))
-                .contains(&Action::Dim(true))
+                .contains(&Action::Backlight(Light::Dim))
         );
         assert!(
             controller
                 .handle(Input::Tick, start + DIM_AFTER)
-                .contains(&Action::Dim(true))
+                .contains(&Action::Backlight(Light::Dim))
         );
         assert!(
             !controller
                 .handle(Input::Tick, start + Duration::from_secs(31))
-                .contains(&Action::Dim(true))
+                .contains(&Action::Backlight(Light::Dim))
         );
     }
 
@@ -1137,7 +1439,7 @@ mod tests {
         controller.handle(Input::HostEnabled, start);
         controller.handle(Input::Tick, start + DIM_AFTER);
         let actions = controller.handle(Input::PowerPressed, start + DIM_AFTER);
-        assert_eq!(actions, vec![Action::Dim(false)]);
+        assert_eq!(actions, vec![Action::Backlight(Light::Full)]);
         assert_eq!(
             controller.handle(Input::PowerPressed, start + DIM_AFTER),
             vec![Action::Exit]
@@ -1153,7 +1455,7 @@ mod tests {
         assert!(
             controller
                 .handle(Input::CableUnplugged, start + DIM_AFTER)
-                .contains(&Action::Dim(false))
+                .contains(&Action::Backlight(Light::Full))
         );
     }
 
@@ -1164,7 +1466,7 @@ mod tests {
         assert!(
             !controller
                 .handle(Input::Tick, start + Duration::from_secs(120))
-                .contains(&Action::Dim(true))
+                .contains(&Action::Backlight(Light::Dim))
         );
     }
 
