@@ -46,25 +46,14 @@ pub(super) fn connected_headline(canvas: &mut Canvas, kind: Kind, cy: i32) {
 }
 
 pub(super) fn printed_turbo_names(turbo: Turbo) -> Vec<&'static str> {
-    let mut names: Vec<&str> = [
-        (xinput::B, "A"),
-        (xinput::A, "B"),
-        (xinput::Y, "X"),
-        (xinput::X, "Y"),
-        (xinput::LEFT_SHOULDER, "L1"),
-        (xinput::RIGHT_SHOULDER, "R1"),
-    ]
-    .into_iter()
-    .filter(|(bit, _)| turbo.buttons & bit != 0)
-    .map(|(_, name)| name)
-    .collect();
-    if turbo.left_trigger {
-        names.push("L2");
-    }
-    if turbo.right_trigger {
-        names.push("R2");
-    }
-    names
+    turbo_shortcuts()
+        .filter(|shortcut| {
+            shortcut
+                .key
+                .active(turbo.buttons, turbo.left_trigger, turbo.right_trigger)
+        })
+        .map(|shortcut| shortcut.printed)
+        .collect()
 }
 
 pub(super) fn options_line(live: &LiveView) -> Option<String> {

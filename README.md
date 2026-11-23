@@ -24,7 +24,8 @@ Change the mode on the handheld's screen with Y before connecting. Quit by holdi
 
 Tap MENU to send Guide. Hold MENU to see the shortcuts on screen:
 
-- MENU + A, B, X, Y, L1, L2, R1 or R2: turbo on that button.
+- MENU + A, B, X, Y, L1, L2, R1, R2: turbo on that button.
+- MENU + START: settings.
 - MENU + up, left or right: the D-pad acts as the D-pad, the left analog stick or the right analog stick.
 
 The face buttons send what is printed on them: the button labelled A sends A.

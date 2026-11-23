@@ -20,7 +20,8 @@ fn device_layers() -> Vec<String> {
     .map(String::from)
     .to_vec();
     layers.extend(PLAIN_CONTROLS.map(|(_, name)| name.to_string()));
-    for (_, key) in TURBO_CONTROLS {
+    for shortcut in turbo_shortcuts() {
+        let key = shortcut.printed.to_lowercase();
         layers.extend(["press", "turbo", "turbo-press"].map(|state| format!("{state}-{key}")));
     }
     layers
@@ -389,8 +390,8 @@ fn active_turbo_and_dpad_mode_are_named_under_the_headline() {
         placed(&ops, "turbo"),
         vec![
             ("turbo-a", 626, 396),
-            ("turbo-r2", 548, 68),
             ("turbo-r1", 616, 68),
+            ("turbo-r2", 548, 68),
         ]
     );
     assert!(placed(&ops, "stick-well").contains(&("stick-well-l", 388, 388)));

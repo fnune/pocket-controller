@@ -7,5 +7,6 @@ pub mod gadget;
 pub mod hid;
 pub mod interrupt;
 pub mod layer;
+pub mod shortcuts;
 pub mod system;
 pub mod xinput;

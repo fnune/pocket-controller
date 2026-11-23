@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::evdev::Pad;
+use crate::shortcuts::{self, Effect, Key, Shortcut};
 use crate::xinput::{self, State};
 
 pub const TAP_LIMIT: Duration = Duration::from_millis(300);
@@ -10,8 +11,6 @@ const STICK_FULL: i16 = 32767;
 const STICK_DIAGONAL: i16 = 23170;
 pub const TRIGGER_PRESSED_ABOVE: u8 = 127;
 
-const FACE: u16 = xinput::A | xinput::B | xinput::X | xinput::Y;
-const SHOULDERS: u16 = xinput::LEFT_SHOULDER | xinput::RIGHT_SHOULDER;
 const DPAD: u16 = xinput::DPAD_UP | xinput::DPAD_DOWN | xinput::DPAD_LEFT | xinput::DPAD_RIGHT;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -37,14 +36,6 @@ impl DpadMode {
             Self::Dpad => "dpad",
             Self::LeftStick => "left-stick",
             Self::RightStick => "right-stick",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Dpad => "D-pad",
-            Self::LeftStick => "Left stick",
-            Self::RightStick => "Right stick",
         }
     }
 }
@@ -110,18 +101,6 @@ pub struct Layer {
     guide_until: Option<Instant>,
 }
 
-fn printed_name(button: u16) -> &'static str {
-    match button {
-        xinput::A => "B",
-        xinput::B => "A",
-        xinput::X => "Y",
-        xinput::Y => "X",
-        xinput::LEFT_SHOULDER => "L1",
-        xinput::RIGHT_SHOULDER => "R1",
-        _ => "?",
-    }
-}
-
 fn bits(mask: u16) -> impl Iterator<Item = u16> {
     (0..16)
         .map(|bit| 1u16 << bit)
@@ -163,54 +142,34 @@ impl Layer {
         for button in bits(pressed) {
             self.menu_chorded = true;
             self.withheld |= button;
-            if button == xinput::START {
-                self.menu_chorded = true;
-                events.push(LayerEvent::OpenSettings);
-            } else if button & (FACE | SHOULDERS) != 0 {
-                self.menu_chorded = true;
-                self.turbo.buttons ^= button;
-                let on = self.turbo.buttons & button != 0;
-                events.push(LayerEvent::TurboChanged(self.turbo));
-                events.push(LayerEvent::Note(format!(
-                    "Turbo {}: {}",
-                    printed_name(button),
-                    on_off(on)
-                )));
-            } else if let Some(mode) = match button {
-                xinput::DPAD_UP => Some(DpadMode::Dpad),
-                xinput::DPAD_LEFT => Some(DpadMode::LeftStick),
-                xinput::DPAD_RIGHT => Some(DpadMode::RightStick),
-                _ => None,
-            } {
-                self.menu_chorded = true;
-                self.dpad_mode = mode;
-                events.push(LayerEvent::DpadModeChanged(mode));
-                events.push(LayerEvent::Note(format!("D-pad: {}", mode.label())));
+            if let Some(shortcut) = shortcuts::for_key(Key::Button(button)) {
+                self.apply(shortcut, events);
             }
         }
-        let left_now = pad.state.left_trigger > TRIGGER_PRESSED_ABOVE;
-        let right_now = pad.state.right_trigger > TRIGGER_PRESSED_ABOVE;
-        let left_before = self.previous.state.left_trigger > TRIGGER_PRESSED_ABOVE;
-        let right_before = self.previous.state.right_trigger > TRIGGER_PRESSED_ABOVE;
-        for (pressed, name, is_left) in [
-            (left_now && !left_before, "L2", true),
-            (right_now && !right_before, "R2", false),
+        for (key, held_now, held_before) in [
+            (
+                Key::LeftTrigger,
+                pad.state.left_trigger > TRIGGER_PRESSED_ABOVE,
+                self.previous.state.left_trigger > TRIGGER_PRESSED_ABOVE,
+            ),
+            (
+                Key::RightTrigger,
+                pad.state.right_trigger > TRIGGER_PRESSED_ABOVE,
+                self.previous.state.right_trigger > TRIGGER_PRESSED_ABOVE,
+            ),
         ] {
-            if !pressed {
+            if !held_now || held_before {
                 continue;
             }
             self.menu_chorded = true;
-            let on = if is_left {
+            if key == Key::LeftTrigger {
                 self.triggers_withheld.0 = true;
-                self.turbo.left_trigger = !self.turbo.left_trigger;
-                self.turbo.left_trigger
             } else {
                 self.triggers_withheld.1 = true;
-                self.turbo.right_trigger = !self.turbo.right_trigger;
-                self.turbo.right_trigger
-            };
-            events.push(LayerEvent::TurboChanged(self.turbo));
-            events.push(LayerEvent::Note(format!("Turbo {name}: {}", on_off(on))));
+            }
+            if let Some(shortcut) = shortcuts::for_key(key) {
+                self.apply(shortcut, events);
+            }
         }
         let held_long = self
             .menu_since
@@ -218,6 +177,39 @@ impl Layer {
         if !self.sheet_shown && (held_long || self.menu_chorded) {
             self.sheet_shown = true;
             events.push(LayerEvent::Sheet(true));
+        }
+    }
+
+    fn apply(&mut self, shortcut: &Shortcut, events: &mut Vec<LayerEvent>) {
+        match shortcut.effect {
+            Effect::OpenSettings => events.push(LayerEvent::OpenSettings),
+            Effect::DpadMode(mode) => {
+                self.dpad_mode = mode;
+                events.push(LayerEvent::DpadModeChanged(mode));
+                events.push(LayerEvent::Note(format!("D-pad: {}", shortcut.label)));
+            }
+            Effect::Turbo => {
+                let on = match shortcut.key {
+                    Key::Button(button) => {
+                        self.turbo.buttons ^= button;
+                        self.turbo.buttons & button != 0
+                    }
+                    Key::LeftTrigger => {
+                        self.turbo.left_trigger = !self.turbo.left_trigger;
+                        self.turbo.left_trigger
+                    }
+                    Key::RightTrigger => {
+                        self.turbo.right_trigger = !self.turbo.right_trigger;
+                        self.turbo.right_trigger
+                    }
+                };
+                events.push(LayerEvent::TurboChanged(self.turbo));
+                events.push(LayerEvent::Note(format!(
+                    "Turbo {}: {}",
+                    shortcut.printed,
+                    on_off(on)
+                )));
+            }
         }
     }
 

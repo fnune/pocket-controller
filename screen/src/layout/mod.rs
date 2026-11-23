@@ -14,6 +14,7 @@ use crate::device::Device;
 use pocket_controller::control::{Diagnosis, Kind, LiveView, Mode, Screen};
 use pocket_controller::frame::Frame;
 use pocket_controller::layer::{DpadMode, Turbo};
+use pocket_controller::shortcuts::{SHORTCUTS, for_dpad_mode, turbo_shortcuts};
 use pocket_controller::xinput;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

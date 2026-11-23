@@ -1,33 +1,5 @@
 use super::*;
 
-#[derive(Clone, Copy)]
-pub(super) enum Control {
-    Button(u16),
-    LeftTrigger,
-    RightTrigger,
-}
-
-impl Control {
-    fn in_mask(self, buttons: u16, left_trigger: bool, right_trigger: bool) -> bool {
-        match self {
-            Control::Button(bit) => buttons & bit != 0,
-            Control::LeftTrigger => left_trigger,
-            Control::RightTrigger => right_trigger,
-        }
-    }
-}
-
-pub(super) const TURBO_CONTROLS: [(Control, &str); 8] = [
-    (Control::Button(xinput::Y), "x"),
-    (Control::Button(xinput::B), "a"),
-    (Control::Button(xinput::A), "b"),
-    (Control::Button(xinput::X), "y"),
-    (Control::Button(xinput::LEFT_SHOULDER), "l1"),
-    (Control::LeftTrigger, "l2"),
-    (Control::RightTrigger, "r2"),
-    (Control::Button(xinput::RIGHT_SHOULDER), "r1"),
-];
-
 pub(super) const PLAIN_CONTROLS: [(u16, &str); 9] = [
     (xinput::DPAD_UP, "press-dpad-up"),
     (xinput::DPAD_DOWN, "press-dpad-down"),
@@ -47,37 +19,16 @@ pub(super) const CHOICE_GAP: i32 = 24;
 pub(super) const CHOICE_HALF: i32 = 8;
 
 pub fn anchor_text(anchor: &str) -> Option<(&'static str, Role, Paint)> {
-    let label = |text| Some((text, Role::SheetLabel, Paint::Text));
+    if let Some(shortcut) = SHORTCUTS.iter().find(|shortcut| shortcut.anchor == anchor) {
+        return Some((shortcut.label, Role::SheetLabel, Paint::Text));
+    }
     let caption = |text| Some((text, Role::Caption, Paint::Muted));
     match anchor {
-        "label-turbo-shoulders-left" | "label-turbo-shoulders-right" | "label-turbo-face" => {
-            label("Turbo")
-        }
-        "label-dpad-mode-dpad" => label(dpad_mode_label(DpadMode::Dpad)),
-        "label-dpad-mode-left-stick" => label(dpad_mode_label(DpadMode::LeftStick)),
-        "label-dpad-mode-right-stick" => label(dpad_mode_label(DpadMode::RightStick)),
-        "label-menu" => label("Hold"),
-        "label-start" => label("Settings"),
+        "label-menu" => Some(("Hold", Role::SheetLabel, Paint::Text)),
         "caption-dpad-mode" => caption("D-pad acts as"),
         "caption-l3" => caption("L3"),
         "caption-r3" => caption("R3"),
         _ => None,
-    }
-}
-
-pub(super) fn dpad_mode_label(mode: DpadMode) -> &'static str {
-    match mode {
-        DpadMode::Dpad => "D-pad",
-        DpadMode::LeftStick => "Left analog stick",
-        DpadMode::RightStick => "Right analog stick",
-    }
-}
-
-pub(super) fn dpad_mode_anchor(mode: DpadMode) -> &'static str {
-    match mode {
-        DpadMode::Dpad => "label-dpad-mode-dpad",
-        DpadMode::LeftStick => "label-dpad-mode-left-stick",
-        DpadMode::RightStick => "label-dpad-mode-right-stick",
     }
 }
 
@@ -121,9 +72,11 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
             canvas.layer(device, name);
         }
     }
-    for (control, key) in TURBO_CONTROLS {
-        let pressed = control.in_mask(live.buttons, live.left_trigger, live.right_trigger);
-        let turbo = control.in_mask(
+    for shortcut in turbo_shortcuts() {
+        let pressed = shortcut
+            .key
+            .active(live.buttons, live.left_trigger, live.right_trigger);
+        let turbo = shortcut.key.active(
             live.turbo.buttons,
             live.turbo.left_trigger,
             live.turbo.right_trigger,
@@ -134,7 +87,10 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
             (false, true) => "turbo",
             (true, true) => "turbo-press",
         };
-        canvas.layer(device, &format!("{state}-{key}"));
+        canvas.layer(
+            device,
+            &format!("{state}-{}", shortcut.printed.to_lowercase()),
+        );
     }
     let badge = match live.dpad {
         DpadMode::Dpad => None,
@@ -151,8 +107,9 @@ pub(super) fn handheld(canvas: &mut Canvas, device: &Device, live: &LiveView, la
     }
     if labelled {
         canvas.layer(device, "leaders");
-        if let Some(row) = device.anchor(dpad_mode_anchor(live.dpad)) {
-            let label_width = canvas.design_width_of(Role::SheetLabel, dpad_mode_label(live.dpad));
+        let choice = for_dpad_mode(live.dpad);
+        if let Some(row) = device.anchor(choice.anchor) {
+            let label_width = canvas.design_width_of(Role::SheetLabel, choice.label);
             canvas.image(
                 "choice",
                 row.x - label_width - CHOICE_GAP,
