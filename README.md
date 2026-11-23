@@ -2,8 +2,7 @@
 
 Pocket Controller turns a Linux handheld into a wired USB controller for a computer. Nothing to install on the computer.
 
-> [!NOTE]
-> So far Pocket Controller has only been tested on the TrimUI Brick running NextUI. Other devices are packaged but untested: see [Supported devices](#supported-devices).
+So far it has only been tested on the TrimUI Brick running NextUI. Other devices are packaged but untested: see [Supported devices](#supported-devices).
 
 | Connected | Shortcuts (hold MENU) |
 | --- | --- |
