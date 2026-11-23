@@ -2,6 +2,9 @@
 
 Pocket Controller turns a Linux handheld into a wired USB controller for a computer. Nothing to install on the computer.
 
+> [!NOTE]
+> So far Pocket Controller has only been tested on the TrimUI Brick running NextUI. Other devices are packaged but untested: see [Supported devices](#supported-devices).
+
 | Connected | Shortcuts (hold MENU) |
 | --- | --- |
 | ![Connected as Xbox-style, with the live handheld showing pressed buttons and turbo on A and R1](docs/screenshots/connected.png) | ![The shortcuts view, labelling every button's MENU chord](docs/screenshots/shortcuts.png) |
@@ -24,7 +27,6 @@ Tap MENU to send Guide. Hold MENU to see the shortcuts on screen:
 
 - MENU + A, B, X, Y, L1, L2, R1 or R2: turbo on that button.
 - MENU + up, left or right: the D-pad acts as the D-pad, the left analog stick or the right analog stick.
-- MENU + SELECT: Guide + Select.
 
 The face buttons send what is printed on them: the button labelled A sends A.
 

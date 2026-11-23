@@ -36,7 +36,7 @@ One table settles settings, debug, quit and Guide. All chords are withheld from 
 | MENU + A, B, X, Y, L1, R1, L2 or R2 | Toggle turbo for that button |
 | MENU + Volume Up or Down | Brightness up or down one step, repeating while held. Wakes a dimmed screen |
 | MENU + Up, Left or Right | D-pad mode, instant: Up is D-pad, Left is left stick, Right is right stick. Withheld, no Guide |
-| MENU + SELECT alone | Passthrough: Guide goes down and SELECT passes, so Guide + Back still reaches the computer. This is the only passthrough. MENU + Down is unused and sends nothing. Guide + A, B, X, Y, the shoulders and the D-pad no longer reach the computer (agreed with `screen.md`) |
+| MENU + SELECT, MENU + Down, MENU + L3 or R3 | Nothing. Every button pressed while MENU is held stays with the handheld, so no Guide combination reaches the computer, and releasing MENU after any chord sends no Guide tap |
 | Volume Up or Down alone | Host volume in generic gamepad mode if enabled. Otherwise nothing, never forwarded as a button |
 | SELECT + START held 2 s (progress bar) | Quit, unchanged |
 | POWER, screen on | Quit, unchanged |

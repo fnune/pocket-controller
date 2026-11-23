@@ -243,7 +243,7 @@ Opened by MENU + START, over the connected view. It captures all input, so the h
 Shown for as long as MENU is held, on the connected, waiting and dimmed views. Releasing MENU closes it. It does not capture a menu: it explains what the held MENU does to the next button.
 
 - Timing: a MENU press released in under 300 ms is a tap and sends Guide on release, without flashing the sheet. After 300 ms of holding, or at the first chord, the sheet appears. Releasing MENU after the sheet appeared and no chord ran sends nothing, so reading the sheet never sends Guide.
-- While it is up nothing reaches the computer, except the Guide plus button passthrough below.
+- While it is up nothing reaches the computer.
 - A chord pressed while the sheet is up runs and is marked on the sheet in a note line, for example "Turbo A: on", "Turbo A: off", "Brightness: 70 %", "D-pad mode: left stick". The note stays until MENU is released.
 - Wakes a dimmed or off screen. The brightness bar is not drawn over it, the sheet shows the brightness value instead.
 - The quit chord is listed separately at the bottom, because it does not use MENU.
@@ -282,7 +282,7 @@ Chords on the sheet:
 | Left | D-pad mode: left stick |
 | Right | D-pad mode: right stick |
 
-Guide plus button passthrough: a button pressed while MENU is held and which is not on the sheet passes through with Guide down. With every face button, shoulder, trigger, volume key and START reserved, the only button left free is SELECT alone, so Guide + SELECT (Guide + Back) still reaches the computer. D-pad up, left and right set D-pad mode, and D-pad down under MENU is unused: it sends nothing. Guide + A, B, X, Y, the shoulders and the D-pad no longer reach the computer. `controller-features.md` has the same rule.
+No Guide passthrough: a button pressed while MENU is held never reaches the computer, whether or not it has a shortcut. D-pad up, left and right set the D-pad mode; SELECT, D-pad down, L3 and R3 under MENU do nothing. An earlier MENU + SELECT passthrough (Guide + Back) was dropped: no common host software needs it, and a quick MENU tap followed by SELECT covers it. `controller-features.md` has the same rule.
 
 ### Hold progress
 

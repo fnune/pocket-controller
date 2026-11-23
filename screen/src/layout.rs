@@ -243,7 +243,7 @@ const RECOMMENDED: &str = "Recommended";
 
 const BRICK: (i32, i32) = (296, 52);
 
-const BRICK_LABELS: [(&str, i32, i32, Align); 9] = [
+const BRICK_LABELS: [(&str, i32, i32, Align); 8] = [
     ("Turbo", 290, 58, Align::Right),
     ("Turbo", 734, 58, Align::Left),
     ("D-pad", 286, 376, Align::Right),
@@ -251,7 +251,6 @@ const BRICK_LABELS: [(&str, i32, i32, Align); 9] = [
     ("Right analog stick", 286, 456, Align::Right),
     ("Turbo", 734, 412, Align::Left),
     ("Hold", 412, 526, Align::Right),
-    ("Guide + Select", 512, 552, Align::Center),
     ("Settings", 612, 526, Align::Left),
 ];
 

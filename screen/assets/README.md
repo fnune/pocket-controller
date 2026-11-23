@@ -125,11 +125,10 @@ MENU held, label anchors as (x, y, alignment). y is the vertical centre of the t
 | L3 | L3 | (490, 438, centre), 18 px `#999999` |
 | R3 | R3 | (534, 438, centre), 18 px `#999999` |
 | MENU | Hold | (412, 526, right) |
-| SELECT | Guide + Select | (512, 552, centre) |
 | START | Settings | (612, 526, left) |
 
 - `brick-choice` (16x16, a white check) marks the active row under "D-pad acts as": `x = label_left - 8 - 16`, where `label_left = 286 - label_width`, and `y = row_y - 8`, so y 368, 408 or 448. In the preview font x is 200 for "D-pad", 81 for "Left analog stick" and 70 for "Right analog stick".
-- L3 and R3 have no leader. The volume rocker (left side), the FN switch and the power button (right side) have no label.
+- L3 and R3 have no leader. SELECT has no leader and no label. The volume rocker (left side), the FN switch and the power button (right side) have no label.
 - One "Turbo" label serves each shoulder pair and one serves the four face buttons.
 - Note line ("Turbo A: on"): centred on (512, 604), 28 px white.
 

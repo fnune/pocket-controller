@@ -161,10 +161,7 @@ impl Layer {
         let held = pad.state.buttons;
         let pressed = held & !self.previous.state.buttons & !xinput::GUIDE;
         for button in bits(pressed) {
-            if button == xinput::BACK {
-                self.menu_chorded = true;
-                continue;
-            }
+            self.menu_chorded = true;
             self.withheld |= button;
             if button == xinput::START {
                 self.menu_chorded = true;
@@ -307,14 +304,7 @@ impl Layer {
         let mut sent = pad.state;
         sent.buttons &= !xinput::GUIDE;
         if menu {
-            let passthrough = sent.buttons & xinput::BACK;
-            sent = State {
-                buttons: passthrough,
-                ..State::default()
-            };
-            if passthrough != 0 {
-                sent.buttons |= xinput::GUIDE;
-            }
+            sent = State::default();
         } else {
             sent.buttons &= !self.withheld;
             if self.triggers_withheld.0 {
@@ -481,14 +471,18 @@ mod tests {
     }
 
     #[test]
-    fn menu_plus_select_passes_guide_and_back_through() {
+    fn a_button_without_a_shortcut_under_menu_sends_nothing() {
         let start = Instant::now();
         let mut layer = layer(start);
         layer.update(pad(xinput::GUIDE), start);
-        let sent = layer
-            .update(pad(xinput::GUIDE | xinput::BACK), ms(start, 20))
-            .sent;
-        assert_eq!(sent.buttons, xinput::GUIDE | xinput::BACK);
+        let chord = layer.update(pad(xinput::GUIDE | xinput::BACK), ms(start, 20));
+        assert_eq!(chord.sent.buttons, 0);
+        assert!(chord.events.contains(&LayerEvent::Sheet(true)));
+        assert_eq!(
+            layer.update(pad(0), ms(start, 60)).sent.buttons,
+            0,
+            "no Guide tap after a chord"
+        );
     }
 
     #[test]
