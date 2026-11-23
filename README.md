@@ -8,7 +8,7 @@ So far it has only been tested on the TrimUI Brick running NextUI. Other devices
 | --- | --- |
 | ![Connected as Xbox-style, with the live handheld showing pressed buttons and turbo on A and R1](docs/screenshots/connected.png) | ![The shortcuts view, labelling every button's MENU chord](docs/screenshots/shortcuts.png) |
 | **D-pad as an analog stick** | **Settings** |
-| ![The D-pad drawn as a stick well, its thumb following the emulated stick](docs/screenshots/analog.png) | ![Settings with the Mode row selected and its three choices beside the list](docs/screenshots/settings.png) |
+| ![The D-pad drawn as a stick well, its thumb following the emulated stick](docs/screenshots/analog.png) | ![Settings with the face buttons row selected and the layout the computer receives](docs/screenshots/settings.png) |
 
 pocket-controller turns the handheld's USB port into a USB device through the kernel's gadget framework (configfs and FunctionFS) and forwards the built-in controller to it.
 

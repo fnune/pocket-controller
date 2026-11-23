@@ -3,6 +3,8 @@ release := "target/" + target + "/release"
 screen_target := "aarch64-unknown-linux-gnu.2.28"
 screen_release := "target/aarch64-unknown-linux-gnu/release"
 presenter_version := "0.14.0"
+nextui_font_commit := "be751f7812bcfc1181b2f0da285bfcb02a5d57c3"
+nextui_font_sha256 := "b653557e79afa5c63ac5fd2a8c4e16c1a55c5addb6cbaf767b4bf4e57c144056"
 pak := "dist/nextui/Pocket Controller.pak"
 stock_app := "dist/trimui-stock/Apps/PocketController"
 brick := env("POCKET_CONTROLLER_HOST", "root@192.168.1.92")
@@ -72,14 +74,21 @@ smoke mode="xbox": build
 e2e: build
     scripts/brick-e2e.py
 
-screenshots: deploy
-    ssh {{ ssh_options }} {{ brick }} 'sh -s' < scripts/brick-screenshots.sh
-    mkdir -p docs/screenshots
-    for shot in connected analog shortcuts settings debug waiting; do \
-        y=$(ssh {{ ssh_options }} {{ brick }} "cut -d, -f2 /tmp/pocket-controller-screenshots/$shot.pan"); \
-        ssh {{ ssh_options }} {{ brick }} "cat /tmp/pocket-controller-screenshots/$shot.raw" \
-            | magick -size 1024x2304 -depth 8 bgra:- -crop "1024x768+0+$y" +repage -alpha off "docs/screenshots/$shot.png"; \
-    done
+screenshots: nextui-font
+    cargo build --release -p pocket-controller-screen
+    scripts/screenshots.sh .cache/nextui-font1.ttf
+
+nextui-font:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    file=.cache/nextui-font1.ttf
+    mkdir -p .cache
+    if [ ! -f "$file" ]; then
+        curl --fail --silent --show-error --location --output "$file.partial" \
+            "https://raw.githubusercontent.com/LoveRetro/NextUI/{{ nextui_font_commit }}/skeleton/SYSTEM/res/font1.ttf"
+        mv "$file.partial" "$file"
+    fi
+    echo "{{ nextui_font_sha256 }}  $file" | sha256sum --check --quiet
 
 assets:
     scripts/assets.py

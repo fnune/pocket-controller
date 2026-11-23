@@ -99,6 +99,8 @@ pub struct Sdl {
     fill_rect: unsafe extern "C" fn(*mut Surface, *const Rect, u32) -> c_int,
     upper_blit: unsafe extern "C" fn(*mut Surface, *const Rect, *mut Surface, *mut Rect) -> c_int,
     free_surface: unsafe extern "C" fn(*mut Surface),
+    rw_from_file: unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_void,
+    save_bmp_rw: unsafe extern "C" fn(*mut Surface, *mut c_void, c_int) -> c_int,
     ttf_init: unsafe extern "C" fn() -> c_int,
     ttf_open_font: unsafe extern "C" fn(*const c_char, c_int) -> *mut Font,
     ttf_size_utf8: unsafe extern "C" fn(*mut Font, *const c_char, *mut c_int, *mut c_int) -> c_int,
@@ -137,6 +139,8 @@ impl Sdl {
             fill_rect: sdl.symbol("SDL_FillRect")?,
             upper_blit: sdl.symbol("SDL_UpperBlit")?,
             free_surface: sdl.symbol("SDL_FreeSurface")?,
+            rw_from_file: sdl.symbol("SDL_RWFromFile")?,
+            save_bmp_rw: sdl.symbol("SDL_SaveBMP_RW")?,
             ttf_init: ttf.symbol("TTF_Init")?,
             ttf_open_font: ttf.symbol("TTF_OpenFont")?,
             ttf_size_utf8: ttf.symbol("TTF_SizeUTF8")?,
@@ -160,7 +164,8 @@ impl Sdl {
         }
     }
 
-    pub fn open_screen(&self) -> Result<Screen<'_>, String> {
+    pub fn open_screen(&self, size: Option<(c_int, c_int)>) -> Result<Screen<'_>, String> {
+        let (width, height) = size.unwrap_or((0, 0));
         if unsafe { (self.init)(INIT_VIDEO) } < 0 {
             return Err(format!("SDL_Init failed: {}", self.error()));
         }
@@ -171,8 +176,8 @@ impl Sdl {
                 title.as_ptr(),
                 WINDOWPOS_UNDEFINED,
                 WINDOWPOS_UNDEFINED,
-                0,
-                0,
+                width,
+                height,
                 WINDOW_SHOWN,
             )
         };
@@ -276,6 +281,18 @@ impl Screen<'_> {
     pub fn blit(&self, image: *mut Surface, x: c_int, y: c_int) {
         let mut target = Rect { x, y, w: 0, h: 0 };
         unsafe { (self.sdl.upper_blit)(image, std::ptr::null(), self.surface, &mut target) };
+    }
+
+    pub fn save_bmp(&self, path: &str) -> Result<(), String> {
+        let file = CString::new(path).map_err(|error| error.to_string())?;
+        let stream = unsafe { (self.sdl.rw_from_file)(file.as_ptr(), c"wb".as_ptr()) };
+        if stream.is_null() {
+            return Err(format!("could not open {path}: {}", self.sdl.error()));
+        }
+        if unsafe { (self.sdl.save_bmp_rw)(self.surface, stream, 1) } < 0 {
+            return Err(format!("could not save {path}: {}", self.sdl.error()));
+        }
+        Ok(())
     }
 
     pub fn present(&self) {

@@ -10,7 +10,7 @@ use layout::{Align, Op, Paint, Role};
 use pocket_controller::frame::FrameReader;
 use sdl::{Color, Font, Rect, Screen, Sdl};
 
-const USAGE: &str = "usage: pocket-controller-screen --font PATH [--assets DIR] [--device NAME]";
+const USAGE: &str = "usage: pocket-controller-screen --font PATH [--assets DIR] [--device NAME] [--size WIDTHxHEIGHT --snapshots DIR]";
 const BUFFERS: usize = 2;
 const LINE_SPACING_PERCENT: i32 = 115;
 
@@ -175,17 +175,20 @@ fn draw(screen: &Screen, fonts: &Fonts, images: &Images, ops: &[Op]) {
 fn run() -> Result<(), String> {
     let mut arguments = std::env::args().skip(1);
     let (mut font_path, mut assets, mut device_name) = (None, None, None);
+    let (mut size, mut snapshots) = (None, None);
     while let Some(argument) = arguments.next() {
         match (argument.as_str(), arguments.next()) {
             ("--font", Some(path)) => font_path = Some(path),
             ("--assets", Some(path)) => assets = Some(path),
             ("--device", Some(name)) => device_name = Some(name),
+            ("--size", Some(text)) => size = Some(parse_size(&text).ok_or(USAGE)?),
+            ("--snapshots", Some(path)) => snapshots = Some(path),
             _ => return Err(USAGE.to_string()),
         }
     }
     let font_path = font_path.ok_or(USAGE)?;
     let sdl = Sdl::load()?;
-    let screen = sdl.open_screen()?;
+    let screen = sdl.open_screen(size)?;
     let (width, height) = screen.size();
     let fonts = Fonts::open(&sdl, &font_path, width)?;
     let (device, images) = match (assets.as_deref(), device_name) {
@@ -211,6 +214,7 @@ fn run() -> Result<(), String> {
         ),
     };
     let mut reader = FrameReader::new();
+    let mut drawn: u32 = 0;
     for line in std::io::stdin().lock().lines() {
         let line = line.map_err(|error| format!("could not read frames: {error}"))?;
         match reader.push_line(&line) {
@@ -222,6 +226,10 @@ fn run() -> Result<(), String> {
                     &images,
                     &layout::layout(&frame, width, height, &measure, &device),
                 );
+                drawn += 1;
+                if let Some(directory) = &snapshots {
+                    screen.save_bmp(&format!("{directory}/{drawn}.bmp"))?;
+                }
             }
             Some(None) => eprintln!("pocket-controller-screen: skipped a frame it could not read"),
             None => {}
@@ -232,6 +240,11 @@ fn run() -> Result<(), String> {
         screen.present();
     }
     Ok(())
+}
+
+fn parse_size(text: &str) -> Option<(i32, i32)> {
+    let (width, height) = text.split_once('x')?;
+    Some((width.parse().ok()?, height.parse().ok()?))
 }
 
 fn main() -> ExitCode {

@@ -70,6 +70,13 @@
             pkgs.cargo-zigbuild
             pkgs.zig
             pkgs.python3
+            pkgs.git-cliff
+            pkgs.jq
+          ];
+          SDL_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+            pkgs.SDL2
+            pkgs.SDL2_ttf
+            pkgs.SDL2_image
           ];
         };
       });
