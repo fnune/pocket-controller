@@ -34,7 +34,7 @@ pak: build (presenter "tg5040-nextui" "tg5040") (presenter "tg5050-nextui" "tg50
     mkdir -p "{{ pak }}/assets"
     cp screen/assets/*.png "{{ pak }}/assets/"
     cp -r screen/assets/devices "{{ pak }}/assets/"
-    cp packaging/nextui/launch.sh packaging/nextui/pak.json "{{ pak }}/"
+    cp packaging/nextui/launch.sh pak.json "{{ pak }}/"
     cp {{ release }}/pocket-controller "{{ pak }}/bin/arm64/"
     for platform in tg5040 tg5050 h700; do mkdir -p "{{ pak }}/bin/$platform" && cp ".cache/minui-presenter-$platform" "{{ pak }}/bin/$platform/minui-presenter"; done
     chmod +x "{{ pak }}/launch.sh" "{{ pak }}"/bin/*/*
@@ -95,3 +95,40 @@ assets:
 
 assets-check:
     scripts/assets.py --check
+
+release-files: pak stock
+    rm -rf dist/release
+    mkdir -p dist/release
+    cp dist/nextui/Pocket.Controller.pak.zip dist/release/
+    cd dist/trimui-stock && zip -qr ../release/PocketController-trimui-stock.zip Apps
+
+release-create version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(jj diff --summary)" ]; then
+        echo "The working copy has changes. Commit them first."
+        exit 1
+    fi
+    jj git fetch
+    if [ "$(jj log --no-graph -r 'main' -T commit_id)" != "$(jj log --no-graph -r 'main@origin' -T commit_id)" ]; then
+        echo "Local main differs from origin. Push or rebase first."
+        exit 1
+    fi
+    jj new main
+    sed -i '0,/^version = ".*"/s//version = "{{ version }}"/' Cargo.toml screen/Cargo.toml
+    cargo update --workspace --quiet
+    jq --indent 2 '.version = "v{{ version }}"' pak.json > pak.json.tmp
+    mv pak.json.tmp pak.json
+    git-cliff --tag "v{{ version }}" --unreleased --prepend CHANGELOG.md
+    awk 'prev != "" && /^## \[/ {print ""} {print; prev = $0}' CHANGELOG.md > CHANGELOG.md.tmp
+    mv CHANGELOG.md.tmp CHANGELOG.md
+    jj commit -m "chore(release): release v{{ version }}"
+    jj bookmark set main -r @-
+    jj git push --bookmark main
+    git tag "v{{ version }}" "$(jj log --no-graph -r main -T commit_id)"
+    git push origin "v{{ version }}"
+
+release-delete version:
+    gh release delete "v{{ version }}" --repo fnune/pocket-controller --yes || true
+    git tag -d "v{{ version }}" || true
+    git push origin --delete "v{{ version }}" || true

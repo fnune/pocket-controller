@@ -1,11 +1,16 @@
 {
   "name": "Pocket Controller",
+  "version": "v0.1.0",
   "type": "TOOL",
   "description": "Use this handheld as a wired controller on a computer",
   "author": "fnune",
   "repo_url": "https://github.com/fnune/pocket-controller",
   "release_filename": "Pocket.Controller.pak.zip",
-  "platforms": ["tg5040", "tg5050", "h700"],
+  "platforms": [
+    "tg5040",
+    "tg5050",
+    "h700"
+  ],
   "launch": "launch.sh",
-  "version": "0.1.0"
+  "experimental": true
 }

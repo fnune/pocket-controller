@@ -78,6 +78,14 @@ just e2e
 pocket-controller-probe int-in:32 int-out:32
 ```
 
+`just screenshots` redraws `docs/screenshots/` on this computer, with no handheld needed.
+
+### Releasing
+
+`just release-create 0.2.0` sets the version in `Cargo.toml` and `pak.json`, writes `CHANGELOG.md` from the Conventional Commits since the last tag, pushes `main` and tags `v0.2.0`. The GitHub mirror runs CI on the tag, then publishes a release with `Pocket.Controller.pak.zip`, `PocketController-trimui-stock.zip` and `SHA256SUMS`.
+
+The NextUI Pak Store reads `pak.json` from the root of `main` on GitHub once an hour and downloads `releases/download/<version>/<release_filename>`. The listing breaks if `pak.json` moves, if `release_filename` stops matching the uploaded zip, or if the zip stops holding the pak's contents at its root.
+
 ## License
 
 AGPL-3.0-or-later. The Xbox 360 and HID protocol details follow [JukaHub](https://github.com/jukaLang/JukaHubV2)'s controller mode.

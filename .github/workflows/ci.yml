@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: fnune/ci@395771a1db7789d50e1070d49e746465de179042
+        with:
+          cache-paths: |
+            .cargo/registry
+            ./target
+          cache-key-files: Cargo.lock
+          command: just check
+
+  package:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: fnune/ci@395771a1db7789d50e1070d49e746465de179042
+        with:
+          apt-packages: zip
+          cache-paths: |
+            .cargo/registry
+            .cache/cargo-zigbuild
+            ./target
+            ./.cache
+          cache-key-files: Cargo.lock
+          command: just release-files
