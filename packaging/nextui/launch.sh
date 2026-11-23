@@ -16,21 +16,12 @@ screen_helper="$PAK_DIR/bin/arm64-gnu/pocket-controller-screen"
 font="$SDCARD_PATH/.system/res/font1.ttf"
 state_dir="$USERDATA_PATH/$PAK_NAME"
 
-case "$PLATFORM" in
-    tg5040) motor="/sys/class/gpio/gpio227/value" ;;
-    tg5050) motor="/sys/class/gpio/gpio236/value" ;;
-    *) motor="" ;;
-esac
-
 set -- --state-dir "$state_dir" --dim
 if [ -x "$screen_helper" ] && [ -f "$font" ]; then
     set -- "$@" --screen "$screen_helper" --font "$font" --assets "$PAK_DIR/assets"
 fi
 if [ -x "$presenter" ]; then
     set -- "$@" --presenter "$presenter"
-fi
-if [ -n "$motor" ] && [ -w "$motor" ]; then
-    set -- "$@" --motor "$motor"
 fi
 
 echo 1 >/tmp/stay_awake

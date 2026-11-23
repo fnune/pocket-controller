@@ -419,12 +419,16 @@ impl ScreenHelper {
         binary: &Path,
         font: &Path,
         assets: Option<&Path>,
+        drawing: Option<&str>,
         screen: Screen,
     ) -> io::Result<Self> {
         let mut command = Command::new(binary);
         command.arg("--font").arg(font);
         if let Some(assets) = assets {
             command.arg("--assets").arg(assets);
+        }
+        if let Some(drawing) = drawing {
+            command.arg("--device").arg(drawing);
         }
         command
             .stdin(std::process::Stdio::piped())

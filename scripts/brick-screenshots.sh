@@ -4,7 +4,7 @@ OUT=/tmp/pocket-controller-screenshots
 rm -rf "$OUT"; mkdir -p "$OUT"
 FIFO=/tmp/pocket-controller-screenshots.fifo
 rm -f "$FIFO"; mkfifo "$FIFO"
-"$PAK/bin/arm64-gnu/pocket-controller-screen" --font /mnt/SDCARD/.system/res/font1.ttf --assets "$PAK/assets" < "$FIFO" > "$OUT/helper.log" 2>&1 &
+"$PAK/bin/arm64-gnu/pocket-controller-screen" --font /mnt/SDCARD/.system/res/font1.ttf --assets "$PAK/assets" --device trimui-brick < "$FIFO" > "$OUT/helper.log" 2>&1 &
 HELPER=$!
 exec 3> "$FIFO"
 shot() {

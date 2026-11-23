@@ -7,6 +7,7 @@ use pocket_controller::control::{Action, Controller, Input, Kind, Mode, Screen, 
 use pocket_controller::functionfs::{Session, SessionEvents};
 use pocket_controller::gadget::{self, Layout, PortLease};
 use pocket_controller::interrupt;
+use pocket_controller::profile;
 use pocket_controller::system::{
     self, Backlight, Motor, Presenter, RealFs, ScreenHelper, StateDir,
 };
@@ -15,6 +16,7 @@ const TICK: Duration = Duration::from_millis(20);
 const SLOW_TICKS: u32 = 5;
 const NOT_ATTACHED: &str = "not attached";
 const DIM_LEVEL: u32 = 10;
+const TRIMUI_LAUNCHER: &str = "/usr/trimui/bin/MainUI";
 const SAVED_BRIGHTNESS: &str = "/tmp/pocket-controller.brightness";
 
 #[derive(Debug, Default)]
@@ -25,12 +27,11 @@ struct Options {
     screen: Option<PathBuf>,
     font: Option<PathBuf>,
     assets: Option<PathBuf>,
-    motor: Option<PathBuf>,
     backlight: bool,
     recover_only: bool,
 }
 
-const USAGE: &str = "usage: pocket-controller [recover] [--mode automatic|xbox|gamepad] [--state-dir PATH] [--screen PATH --font PATH [--assets DIR]] [--presenter PATH] [--motor PATH] [--dim]";
+const USAGE: &str = "usage: pocket-controller [recover] [--mode automatic|xbox|gamepad] [--state-dir PATH] [--screen PATH --font PATH [--assets DIR]] [--presenter PATH] [--dim]";
 
 fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, String> {
     let mut options = Options::default();
@@ -53,7 +54,6 @@ fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, Str
             "--screen" => options.screen = Some(PathBuf::from(value("--screen")?)),
             "--font" => options.font = Some(PathBuf::from(value("--font")?)),
             "--assets" => options.assets = Some(PathBuf::from(value("--assets")?)),
-            "--motor" => options.motor = Some(PathBuf::from(value("--motor")?)),
             "--dim" => options.backlight = true,
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("unknown argument {other:?}\n{USAGE}")),
@@ -74,6 +74,7 @@ struct Hardware {
     helper: Option<ScreenHelper>,
     helper_paths: Option<(PathBuf, PathBuf)>,
     assets: Option<PathBuf>,
+    drawing: Option<&'static str>,
     motor: Option<Motor>,
     backlight: Option<Backlight>,
     state: Option<StateDir>,
@@ -228,7 +229,13 @@ impl Hardware {
         if self.helper.is_none()
             && let Some((binary, font)) = self.helper_paths.take()
         {
-            match ScreenHelper::start(&binary, &font, self.assets.as_deref(), screen.clone()) {
+            match ScreenHelper::start(
+                &binary,
+                &font,
+                self.assets.as_deref(),
+                self.drawing,
+                screen.clone(),
+            ) {
                 Ok(helper) => {
                     self.helper = Some(helper);
                     return;
@@ -358,6 +365,12 @@ fn run(options: Options) -> Result<(), String> {
         .mode
         .or_else(|| state.as_ref().and_then(StateDir::mode))
         .unwrap_or(Mode::Automatic);
+    let model = profile::detect(
+        std::env::var("DEVICE").ok().as_deref(),
+        std::fs::read(TRIMUI_LAUNCHER).ok().as_deref(),
+    );
+    let profile = model.profile();
+    eprintln!("device: {model:?}");
     let mut hardware = Hardware {
         fs,
         layout,
@@ -370,9 +383,13 @@ fn run(options: Options) -> Result<(), String> {
         helper: None,
         helper_paths: options.screen.zip(options.font),
         assets: options.assets,
-        motor: options.motor.map(Motor::new),
-        backlight: options
-            .backlight
+        drawing: profile.drawing,
+        motor: profile
+            .motor
+            .map(PathBuf::from)
+            .filter(|path| path.exists())
+            .map(Motor::new),
+        backlight: (options.backlight && profile.sunxi_backlight)
             .then(|| Backlight::new(PathBuf::from(SAVED_BRIGHTNESS))),
         state,
     };

@@ -11,7 +11,6 @@ use pocket_controller::frame::FrameReader;
 use sdl::{Color, Font, Rect, Screen, Sdl};
 
 const USAGE: &str = "usage: pocket-controller-screen --font PATH [--assets DIR] [--device NAME]";
-const DEFAULT_DEVICE: &str = "trimui-brick";
 const BUFFERS: usize = 2;
 const LINE_SPACING_PERCENT: i32 = 115;
 
@@ -187,9 +186,8 @@ fn run() -> Result<(), String> {
     let screen = sdl.open_screen()?;
     let (width, height) = screen.size();
     let fonts = Fonts::open(&sdl, &font_path, width)?;
-    let device_name = device_name.unwrap_or_else(|| DEFAULT_DEVICE.to_string());
-    let (device, images) = match assets.as_deref() {
-        Some(assets) => {
+    let (device, images) = match (assets.as_deref(), device_name) {
+        (Some(assets), Some(device_name)) => {
             let device = load_device(assets, &device_name);
             let mut images = Images::load(&sdl, assets, layout::IMAGES.iter().copied());
             images.extend(Images::load(
@@ -199,7 +197,11 @@ fn run() -> Result<(), String> {
             ));
             (device, images)
         }
-        None => (
+        (Some(assets), None) => (
+            Device::default(),
+            Images::load(&sdl, assets, layout::IMAGES.iter().copied()),
+        ),
+        (None, _) => (
             Device::default(),
             Images {
                 loaded: std::collections::HashMap::new(),
