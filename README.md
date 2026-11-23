@@ -2,6 +2,12 @@
 
 Pocket Controller turns a Linux handheld into a wired USB controller for a computer. Nothing to install on the computer.
 
+| Connected | Shortcuts (hold MENU) |
+| --- | --- |
+| ![Connected as Xbox-style, with the live handheld showing pressed buttons and turbo on A and R1](docs/screenshots/connected.png) | ![The shortcuts view, labelling every button's MENU chord](docs/screenshots/shortcuts.png) |
+| **D-pad as an analog stick** | **Mode picker** |
+| ![The D-pad drawn as a stick well, its thumb following the emulated stick](docs/screenshots/analog.png) | ![The mode picker with Automatic, Xbox-style and Generic](docs/screenshots/picker.png) |
+
 pocket-controller turns the handheld's USB port into a USB device through the kernel's gadget framework (configfs and FunctionFS) and forwards the built-in controller to it.
 
 ## Modes

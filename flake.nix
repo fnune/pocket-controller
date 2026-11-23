@@ -65,6 +65,7 @@
             pkgs.just
             pkgs.usbutils
             pkgs.zip
+            pkgs.imagemagick
             pkgs.cargo-zigbuild
             pkgs.zig
             pkgs.python3

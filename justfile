@@ -70,3 +70,12 @@ smoke mode="xbox": build
 
 e2e: build
     scripts/brick-e2e.py
+
+screenshots: deploy
+    ssh {{ ssh_options }} {{ brick }} 'sh -s' < scripts/brick-screenshots.sh
+    mkdir -p docs/screenshots
+    for shot in connected analog shortcuts picker waiting; do \
+        y=$(ssh {{ ssh_options }} {{ brick }} "cut -d, -f2 /tmp/pocket-controller-screenshots/$shot.pan"); \
+        ssh {{ ssh_options }} {{ brick }} "cat /tmp/pocket-controller-screenshots/$shot.raw" \
+            | magick -size 1024x2304 -depth 8 bgra:- -crop "1024x768+0+$y" +repage -alpha off "docs/screenshots/$shot.png"; \
+    done
