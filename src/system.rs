@@ -274,7 +274,7 @@ fn load_pad_state(file: &File, reader: &mut PadReader) {
 }
 
 pub fn spawn_pad_reader(device: InputDevice, events: Sender<(u64, Input)>) -> io::Result<()> {
-    let mut file = open_device(&device)?;
+    let file = open_device(&device)?;
     if unsafe { libc::ioctl(file.as_raw_fd(), EVIOCGRAB as _, 1 as libc::c_int) } != 0 {
         return Err(io::Error::other(format!(
             "could not take over {}: {}",
@@ -287,67 +287,81 @@ pub fn spawn_pad_reader(device: InputDevice, events: Sender<(u64, Input)>) -> io
     let _ = events.send((0, Input::Pad(reader.pad())));
     std::thread::Builder::new()
         .name("pad".into())
-        .spawn(move || {
-            let mut buffer = [0u8; evdev::EVENT_SIZE * 64];
-            let mut dropping = false;
-            loop {
-                let read = match file.read(&mut buffer) {
-                    Ok(read) => read,
-                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(error) => {
-                        eprintln!("lost the built-in controller: {error}");
-                        let _ = events.send((0, Input::QuitRequested));
-                        return;
-                    }
-                };
-                let mut complete = false;
-                for event in Event::decode(&buffer[..read]) {
-                    if event.kind == evdev::EV_SYN && event.code == evdev::SYN_DROPPED {
-                        dropping = true;
-                        continue;
-                    }
-                    if dropping {
-                        if event.kind == evdev::EV_SYN && event.code == evdev::SYN_REPORT {
-                            dropping = false;
-                            load_pad_state(&file, &mut reader);
-                            complete = true;
-                        }
-                        continue;
-                    }
-                    complete |= reader.feed(event);
-                }
-                if complete && events.send((0, Input::Pad(reader.pad()))).is_err() {
-                    return;
-                }
-            }
-        })?;
+        .spawn(move || pad_loop(file, reader, &events))?;
     Ok(())
 }
 
+trait PadSource: Read {
+    fn resync(&self, reader: &mut PadReader);
+}
+
+impl PadSource for File {
+    fn resync(&self, reader: &mut PadReader) {
+        load_pad_state(self, reader);
+    }
+}
+
+fn pad_loop(mut source: impl PadSource, mut reader: PadReader, events: &Sender<(u64, Input)>) {
+    let mut buffer = [0u8; evdev::EVENT_SIZE * 64];
+    let mut dropping = false;
+    loop {
+        let read = match source.read(&mut buffer) {
+            Ok(read) => read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                eprintln!("lost the built-in controller: {error}");
+                let _ = events.send((0, Input::QuitRequested));
+                return;
+            }
+        };
+        let mut complete = false;
+        for event in Event::decode(&buffer[..read]) {
+            if event.kind == evdev::EV_SYN && event.code == evdev::SYN_DROPPED {
+                dropping = true;
+                continue;
+            }
+            if dropping {
+                if event.kind == evdev::EV_SYN && event.code == evdev::SYN_REPORT {
+                    dropping = false;
+                    source.resync(&mut reader);
+                    complete = true;
+                }
+                continue;
+            }
+            complete |= reader.feed(event);
+        }
+        if complete && events.send((0, Input::Pad(reader.pad()))).is_err() {
+            return;
+        }
+    }
+}
+
 pub fn spawn_power_reader(device: InputDevice, events: Sender<(u64, Input)>) -> io::Result<()> {
-    let mut file = open_device(&device)?;
+    let file = open_device(&device)?;
     std::thread::Builder::new()
         .name("power".into())
-        .spawn(move || {
-            let mut buffer = [0u8; evdev::EVENT_SIZE * 16];
-            loop {
-                match file.read(&mut buffer) {
-                    Ok(read) => {
-                        let pressed = Event::decode(&buffer[..read]).iter().any(|event| {
-                            event.kind == evdev::EV_KEY
-                                && event.code == evdev::KEY_POWER
-                                && event.value == 1
-                        });
-                        if pressed && events.send((0, Input::PowerPressed)).is_err() {
-                            return;
-                        }
-                    }
-                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                    Err(_) => return,
+        .spawn(move || power_loop(file, &events))?;
+    Ok(())
+}
+
+fn power_loop(mut source: impl Read, events: &Sender<(u64, Input)>) {
+    let mut buffer = [0u8; evdev::EVENT_SIZE * 16];
+    loop {
+        match source.read(&mut buffer) {
+            Ok(read) => {
+                let pressed = Event::decode(&buffer[..read]).iter().any(|event| {
+                    event.kind == evdev::EV_KEY
+                        && event.code == evdev::KEY_POWER
+                        && event.value == 1
+                });
+                if pressed && events.send((0, Input::PowerPressed)).is_err() {
+                    return;
                 }
             }
-        })?;
-    Ok(())
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(_) => return,
+        }
+    }
 }
 
 pub fn spawn_quit_signal_waiter(events: Sender<(u64, Input)>) -> io::Result<()> {
