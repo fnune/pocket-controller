@@ -8,8 +8,10 @@ use pocket_controller::evdev::InputDevice;
 use pocket_controller::gadget::{self, Layout, PortLease};
 use pocket_controller::interrupt;
 use pocket_controller::profile;
-use pocket_controller::runtime::{Hardware, run_loop};
-use pocket_controller::system::{self, Backlight, Motor, Presenter, RealFs, StateDir};
+use pocket_controller::runtime::{Hardware, Notice, RealHelpers, RealSessions, run_loop};
+use pocket_controller::system::{
+    self, Backlight, Motor, Panel, Presenter, RealFs, RealPanel, StateDir,
+};
 
 const TRIMUI_LAUNCHER: &str = "/usr/trimui/bin/MainUI";
 const SAVED_BRIGHTNESS: &str = "/tmp/pocket-controller.brightness";
@@ -103,15 +105,19 @@ fn run(options: Options) -> Result<(), String> {
     let profile = model.profile();
     eprintln!("device: {model:?}");
     let mut hardware = Hardware {
-        fs,
+        fs: std::rc::Rc::new(fs),
         layout,
         lease: None,
         session: None,
+        sessions: Box::new(RealSessions),
         generation: 0,
         serial: system::serial_number(),
         events: sender.clone(),
-        presenter: options.presenter.map(Presenter::new),
+        presenter: options
+            .presenter
+            .map(|binary| Box::new(Presenter::new(binary)) as Box<dyn Notice>),
         helper: None,
+        helpers: Box::new(RealHelpers),
         helper_paths: options.screen.zip(options.font),
         assets: options.assets,
         drawing: profile.drawing,
@@ -120,12 +126,16 @@ fn run(options: Options) -> Result<(), String> {
             .map(PathBuf::from)
             .filter(|path| path.exists())
             .map(Motor::new),
-        backlight: profile
-            .sunxi_backlight
-            .then(|| Backlight::new(PathBuf::from(SAVED_BRIGHTNESS))),
+        backlight: profile.sunxi_backlight.then(|| {
+            Backlight::with_panel(
+                Box::new(RealPanel) as Box<dyn Panel>,
+                PathBuf::from(SAVED_BRIGHTNESS),
+            )
+        }),
+        usb_power: Box::new(system::usb_power_online),
         state,
     };
-    let lease = PortLease::take(&hardware.fs, &hardware.layout)
+    let lease = PortLease::take(&*hardware.fs, &hardware.layout)
         .map_err(|error| format!("could not take the USB port: {error}"))?;
     let snapshot = lease.snapshot();
     eprintln!(

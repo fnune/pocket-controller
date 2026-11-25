@@ -99,6 +99,16 @@ pub trait Panel {
     fn write(&self, level: u32) -> io::Result<()>;
 }
 
+impl Panel for Box<dyn Panel> {
+    fn read(&self) -> io::Result<u32> {
+        (**self).read()
+    }
+
+    fn write(&self, level: u32) -> io::Result<()> {
+        (**self).write(level)
+    }
+}
+
 pub struct RealPanel;
 
 impl Panel for RealPanel {

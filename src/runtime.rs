@@ -1,11 +1,17 @@
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
-use crate::control::{Action, Controller, Input, Kind, Light, Screen, UsbLink};
+use crate::control::{
+    Action, Controller, DebugView, Input, Kind, Light, LiveView, Screen, SheetView, UsbLink,
+};
 use crate::functionfs::{Session, SessionEvents};
-use crate::gadget::{self, Layout, PortLease};
-use crate::system::{self, Backlight, Motor, Presenter, RealFs, ScreenHelper, StateDir};
+use crate::gadget::{self, GadgetFs, Layout, PortLease};
+use crate::settings::SettingsView;
+use crate::system::{self, Backlight, Motor, Panel, ScreenHelper, StateDir};
+use crate::xinput::{EndpointBudget, State};
 
 const TICK: Duration = Duration::from_millis(20);
 const SLOW_TICKS: u32 = 5;
@@ -13,21 +19,168 @@ const NOT_ATTACHED: &str = "not attached";
 const DIM_LEVEL: u32 = 10;
 const OFF_LEVEL: u32 = 0;
 
+pub trait ActiveSession {
+    fn budget(&self) -> EndpointBudget;
+    fn submit(&self, state: &State);
+    fn stop(self: Box<Self>, fs: &dyn GadgetFs, layout: &Layout, lease: &PortLease);
+}
+
+impl ActiveSession for Session {
+    fn budget(&self) -> EndpointBudget {
+        Session::budget(self)
+    }
+
+    fn submit(&self, state: &State) {
+        Session::submit(self, state);
+    }
+
+    fn stop(self: Box<Self>, fs: &dyn GadgetFs, layout: &Layout, lease: &PortLease) {
+        Session::stop(*self, fs, layout, lease);
+    }
+}
+
+pub struct StartRequest<'a> {
+    pub fs: &'a dyn GadgetFs,
+    pub layout: &'a Layout,
+    pub lease: &'a PortLease,
+    pub kind: Kind,
+    pub serial: &'a str,
+    pub events: SessionEvents,
+    pub known_budget: Option<EndpointBudget>,
+}
+
+pub trait SessionStarter {
+    fn start(&self, request: StartRequest<'_>) -> io::Result<Box<dyn ActiveSession>>;
+}
+
+pub struct RealSessions;
+
+impl SessionStarter for RealSessions {
+    fn start(&self, request: StartRequest<'_>) -> io::Result<Box<dyn ActiveSession>> {
+        let session = Session::start(
+            request.fs,
+            request.layout,
+            request.lease,
+            request.kind,
+            request.serial,
+            request.events,
+            request.known_budget,
+        )?;
+        Ok(Box::new(session))
+    }
+}
+
+pub trait Helper {
+    fn show(&mut self, screen: Screen) -> io::Result<()>;
+    fn hold(&mut self, progress: Option<u8>) -> io::Result<()>;
+    fn busy(&mut self, busy: bool) -> io::Result<()>;
+    fn live(&mut self, live: LiveView) -> io::Result<()>;
+    fn sheet(&mut self, sheet: Option<SheetView>) -> io::Result<()>;
+    fn settings(&mut self, view: Option<SettingsView>) -> io::Result<()>;
+    fn debug(&mut self, view: Option<DebugView>) -> io::Result<()>;
+    fn animate(&mut self) -> io::Result<()>;
+    fn close(self: Box<Self>);
+}
+
+impl Helper for ScreenHelper {
+    fn show(&mut self, screen: Screen) -> io::Result<()> {
+        ScreenHelper::show(self, screen)
+    }
+
+    fn hold(&mut self, progress: Option<u8>) -> io::Result<()> {
+        ScreenHelper::hold(self, progress)
+    }
+
+    fn busy(&mut self, busy: bool) -> io::Result<()> {
+        ScreenHelper::busy(self, busy)
+    }
+
+    fn live(&mut self, live: LiveView) -> io::Result<()> {
+        ScreenHelper::live(self, live)
+    }
+
+    fn sheet(&mut self, sheet: Option<SheetView>) -> io::Result<()> {
+        ScreenHelper::sheet(self, sheet)
+    }
+
+    fn settings(&mut self, view: Option<SettingsView>) -> io::Result<()> {
+        ScreenHelper::settings(self, view)
+    }
+
+    fn debug(&mut self, view: Option<DebugView>) -> io::Result<()> {
+        ScreenHelper::debug(self, view)
+    }
+
+    fn animate(&mut self) -> io::Result<()> {
+        ScreenHelper::animate(self)
+    }
+
+    fn close(self: Box<Self>) {
+        ScreenHelper::close(*self);
+    }
+}
+
+pub trait HelperStarter {
+    fn start(
+        &self,
+        binary: &Path,
+        font: &Path,
+        assets: Option<&Path>,
+        drawing: Option<&str>,
+        screen: Screen,
+    ) -> io::Result<Box<dyn Helper>>;
+}
+
+pub struct RealHelpers;
+
+impl HelperStarter for RealHelpers {
+    fn start(
+        &self,
+        binary: &Path,
+        font: &Path,
+        assets: Option<&Path>,
+        drawing: Option<&str>,
+        screen: Screen,
+    ) -> io::Result<Box<dyn Helper>> {
+        Ok(Box::new(ScreenHelper::start(
+            binary, font, assets, drawing, screen,
+        )?))
+    }
+}
+
+pub trait Notice {
+    fn show(&mut self, text: &str);
+    fn close(&mut self);
+}
+
+impl Notice for system::Presenter {
+    fn show(&mut self, text: &str) {
+        system::Presenter::show(self, text);
+    }
+
+    fn close(&mut self) {
+        system::Presenter::close(self);
+    }
+}
+
 pub struct Hardware {
-    pub fs: RealFs,
+    pub fs: Rc<dyn GadgetFs>,
     pub layout: Layout,
     pub lease: Option<PortLease>,
-    pub session: Option<Session>,
+    pub session: Option<Box<dyn ActiveSession>>,
+    pub sessions: Box<dyn SessionStarter>,
     pub generation: u64,
     pub serial: String,
     pub events: Sender<(u64, Input)>,
-    pub presenter: Option<Presenter>,
-    pub helper: Option<ScreenHelper>,
+    pub presenter: Option<Box<dyn Notice>>,
+    pub helper: Option<Box<dyn Helper>>,
+    pub helpers: Box<dyn HelperStarter>,
     pub helper_paths: Option<(PathBuf, PathBuf)>,
     pub assets: Option<PathBuf>,
     pub drawing: Option<&'static str>,
     pub motor: Option<Motor>,
-    pub backlight: Option<Backlight>,
+    pub backlight: Option<Backlight<Box<dyn Panel>>>,
+    pub usb_power: Box<dyn Fn() -> Option<bool>>,
     pub state: Option<StateDir>,
 }
 
@@ -45,16 +198,18 @@ impl Hardware {
         };
         let serial = lease.serial().unwrap_or(&self.serial).to_string();
         let known_budget = self.state.as_ref().and_then(StateDir::endpoint_budget);
-        let session = Session::start(
-            &self.fs,
-            &self.layout,
-            lease,
-            kind,
-            &serial,
-            events,
-            known_budget,
-        )
-        .map_err(|error| format!("could not start the {kind:?} controller: {error}"))?;
+        let session = self
+            .sessions
+            .start(StartRequest {
+                fs: &*self.fs,
+                layout: &self.layout,
+                lease,
+                kind,
+                serial: &serial,
+                events,
+                known_budget,
+            })
+            .map_err(|error| format!("could not start the {kind:?} controller: {error}"))?;
         eprintln!("controller ready as {kind:?} on {}", lease.controller());
         if kind == Kind::Xbox
             && let Some(state) = &self.state
@@ -71,7 +226,7 @@ impl Hardware {
 
     pub fn stop(&mut self) {
         if let (Some(session), Some(lease)) = (self.session.take(), &self.lease) {
-            session.stop(&self.fs, &self.layout, lease);
+            session.stop(&*self.fs, &self.layout, lease);
         }
     }
 
@@ -179,7 +334,7 @@ impl Hardware {
             backlight.restore();
         }
         if let Some(lease) = self.lease.take() {
-            match lease.give_back(&self.fs, &self.layout) {
+            match lease.give_back(&*self.fs, &self.layout) {
                 Ok(()) => eprintln!("gave the USB port back"),
                 Err(error) => eprintln!("could not give the USB port back cleanly: {error}"),
             }
@@ -196,7 +351,7 @@ impl Hardware {
         if self.helper.is_none()
             && let Some((binary, font)) = self.helper_paths.take()
         {
-            match ScreenHelper::start(
+            match self.helpers.start(
                 &binary,
                 &font,
                 self.assets.as_deref(),
@@ -297,10 +452,10 @@ pub fn run_loop(
                     vec![Input::Tick]
                 } else {
                     let state = hardware.controller().and_then(|controller| {
-                        gadget::controller_state(&hardware.fs, &hardware.layout, controller)
+                        gadget::controller_state(&*hardware.fs, &hardware.layout, controller)
                     });
                     hardware.animate();
-                    link_watch.observe(system::usb_power_online(), state.as_deref())
+                    link_watch.observe((hardware.usb_power)(), state.as_deref())
                 }
             }
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
