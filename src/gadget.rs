@@ -709,17 +709,11 @@ pub mod fake {
             Ok(())
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::fake::FakeFs;
-    use super::*;
+    pub const G1: &str = "/sys/kernel/config/usb_gadget/g1";
+    pub const CONTROLLER: &str = "5100000.udc-controller";
 
-    const G1: &str = "/sys/kernel/config/usb_gadget/g1";
-    const CONTROLLER: &str = "5100000.udc-controller";
-
-    fn brick() -> FakeFs {
+    pub fn brick() -> FakeFs {
         let mut fs = FakeFs::with_dirs(&[
             "/sys/kernel/config/usb_gadget/g1/functions/ffs.adb",
             "/sys/kernel/config/usb_gadget/g1/configs/c.1/strings/0x409",
@@ -756,12 +750,18 @@ mod tests {
         fs
     }
 
-    fn test_layout() -> Layout {
-        Layout {
-            settle: Duration::ZERO,
-            ..Layout::system()
+    pub fn test_layout() -> super::Layout {
+        super::Layout {
+            settle: std::time::Duration::ZERO,
+            ..super::Layout::system()
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fake::{CONTROLLER, FakeFs, G1, brick, test_layout};
+    use super::*;
 
     fn xbox() -> Identity {
         Identity {
