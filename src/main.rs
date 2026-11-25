@@ -458,3 +458,98 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(arguments: &[&str]) -> Result<Options, String> {
+        parse_options(arguments.iter().map(|argument| argument.to_string()))
+    }
+
+    #[test]
+    fn no_arguments_leave_every_option_unset() {
+        let options = parse(&[]).unwrap();
+        assert_eq!(options.mode, None);
+        assert_eq!(options.state_dir, None);
+        assert!(!options.recover_only);
+    }
+
+    #[test]
+    fn recover_selects_recovery_only() {
+        assert!(parse(&["recover"]).unwrap().recover_only);
+    }
+
+    #[test]
+    fn every_mode_name_is_accepted() {
+        for (name, mode) in [
+            ("automatic", Mode::Automatic),
+            ("xbox", Mode::Xbox),
+            ("gamepad", Mode::Gamepad),
+        ] {
+            assert_eq!(parse(&["--mode", name]).unwrap().mode, Some(mode));
+        }
+    }
+
+    #[test]
+    fn an_unknown_mode_is_rejected_with_its_text() {
+        let error = parse(&["--mode", "ps5"]).unwrap_err();
+        assert!(error.contains("ps5"));
+    }
+
+    #[test]
+    fn path_options_are_stored_as_given() {
+        let options = parse(&[
+            "--state-dir",
+            "/state",
+            "--presenter",
+            "/bin/presenter",
+            "--screen",
+            "/bin/screen",
+            "--font",
+            "/fonts/a.ttf",
+            "--assets",
+            "/assets",
+        ])
+        .unwrap();
+        assert_eq!(options.state_dir, Some(PathBuf::from("/state")));
+        assert_eq!(options.presenter, Some(PathBuf::from("/bin/presenter")));
+        assert_eq!(options.screen, Some(PathBuf::from("/bin/screen")));
+        assert_eq!(options.font, Some(PathBuf::from("/fonts/a.ttf")));
+        assert_eq!(options.assets, Some(PathBuf::from("/assets")));
+    }
+
+    #[test]
+    fn an_option_missing_its_value_names_the_option() {
+        for name in [
+            "--mode",
+            "--state-dir",
+            "--presenter",
+            "--screen",
+            "--font",
+            "--assets",
+        ] {
+            let error = parse(&[name]).unwrap_err();
+            assert_eq!(error, format!("{name} needs a value"));
+        }
+    }
+
+    #[test]
+    fn an_unknown_argument_is_rejected_and_followed_by_the_usage() {
+        let error = parse(&["--turbo"]).unwrap_err();
+        assert!(error.contains("--turbo"));
+        assert!(error.ends_with(USAGE));
+    }
+
+    #[test]
+    fn help_in_either_spelling_returns_the_usage() {
+        assert_eq!(parse(&["--help"]).unwrap_err(), USAGE);
+        assert_eq!(parse(&["-h"]).unwrap_err(), USAGE);
+    }
+
+    #[test]
+    fn a_later_occurrence_of_an_option_wins() {
+        let options = parse(&["--mode", "xbox", "--mode", "gamepad"]).unwrap();
+        assert_eq!(options.mode, Some(Mode::Gamepad));
+    }
+}

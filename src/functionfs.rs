@@ -444,4 +444,48 @@ mod tests {
     fn unknown_event_types_are_skipped() {
         assert!(parse_events(&raw_event(42, [0; 8])).is_empty());
     }
+
+    #[test]
+    fn every_event_type_maps_to_its_variant() {
+        let cases = [
+            (EVENT_BIND, FunctionEvent::Bind),
+            (EVENT_UNBIND, FunctionEvent::Unbind),
+            (EVENT_ENABLE, FunctionEvent::Enable),
+            (EVENT_DISABLE, FunctionEvent::Disable),
+            (EVENT_SUSPEND, FunctionEvent::Suspend),
+            (EVENT_RESUME, FunctionEvent::Resume),
+        ];
+        for (kind, expected) in cases {
+            assert_eq!(parse_events(&raw_event(kind, [0; 8])), vec![expected]);
+        }
+    }
+
+    #[test]
+    fn a_truncated_trailing_event_is_dropped_without_losing_the_complete_ones() {
+        let mut bytes = raw_event(EVENT_BIND, [0; 8]);
+        bytes.extend_from_slice(&raw_event(EVENT_ENABLE, [0; 8])[..EVENT_SIZE - 1]);
+        assert_eq!(parse_events(&bytes), vec![FunctionEvent::Bind]);
+    }
+
+    #[test]
+    fn an_unknown_event_between_known_ones_does_not_shift_the_rest() {
+        let mut bytes = raw_event(EVENT_BIND, [0; 8]);
+        bytes.extend(raw_event(99, [0; 8]));
+        bytes.extend(raw_event(EVENT_RESUME, [0; 8]));
+        assert_eq!(
+            parse_events(&bytes),
+            vec![FunctionEvent::Bind, FunctionEvent::Resume]
+        );
+    }
+
+    #[test]
+    fn empty_input_yields_no_events() {
+        assert!(parse_events(&[]).is_empty());
+    }
+
+    #[test]
+    fn setup_bytes_of_a_non_setup_event_are_ignored() {
+        let events = parse_events(&raw_event(EVENT_DISABLE, [0xff; 8]));
+        assert_eq!(events, vec![FunctionEvent::Disable]);
+    }
 }

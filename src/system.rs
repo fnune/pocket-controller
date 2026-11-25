@@ -675,6 +675,161 @@ pub fn serial_number() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn scratch_dir(label: &str) -> PathBuf {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "pocket-controller-test-{}-{}-{label}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        path
+    }
+
+    #[test]
+    fn a_state_dir_that_does_not_exist_yields_defaults() {
+        let state = StateDir::new(scratch_dir("missing"));
+        assert_eq!(state.mode(), None);
+        assert_eq!(state.saved(), Saved::default());
+        assert_eq!(state.endpoint_budget(), None);
+    }
+
+    #[test]
+    fn saving_creates_the_state_dir_and_round_trips_every_field() {
+        let path = scratch_dir("round-trip");
+        let state = StateDir::new(path.clone());
+        let settings = Settings {
+            face: FaceLayout::Position,
+            rumble: false,
+            screen: ScreenWhilePlaying::OffAfter,
+        };
+        state.save_mode(Mode::Gamepad);
+        state.save_settings(settings);
+        state.save_dpad_mode(DpadMode::RightStick);
+        state.save_endpoint_budget(EndpointBudget::OneInterrupt);
+
+        let reloaded = StateDir::new(path.clone());
+        assert_eq!(reloaded.mode(), Some(Mode::Gamepad));
+        assert_eq!(
+            reloaded.saved(),
+            Saved {
+                settings,
+                dpad: DpadMode::RightStick
+            }
+        );
+        assert_eq!(
+            reloaded.endpoint_budget(),
+            Some(EndpointBudget::OneInterrupt)
+        );
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn unrecognised_saved_values_fall_back_to_defaults_instead_of_failing() {
+        let path = scratch_dir("garbage");
+        std::fs::create_dir_all(&path).unwrap();
+        for name in ["mode", "face", "screen", "dpad", "endpoints"] {
+            std::fs::write(path.join(name), "nonsense\n").unwrap();
+        }
+        let state = StateDir::new(path.clone());
+        assert_eq!(state.mode(), None);
+        assert_eq!(state.saved(), Saved::default());
+        assert_eq!(state.endpoint_budget(), None);
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn rumble_is_on_unless_the_file_says_off() {
+        let path = scratch_dir("rumble");
+        std::fs::create_dir_all(&path).unwrap();
+        let state = StateDir::new(path.clone());
+        std::fs::write(path.join("rumble"), "off\n").unwrap();
+        assert!(!state.saved().settings.rumble);
+        std::fs::write(path.join("rumble"), "garbage").unwrap();
+        assert!(state.saved().settings.rumble);
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn the_motor_is_only_written_when_its_state_changes() {
+        let path = scratch_dir("motor");
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("motor");
+        let mut motor = Motor::new(file.clone());
+        motor.set(false);
+        assert!(!file.exists());
+        motor.set(true);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "1");
+        std::fs::remove_file(&file).unwrap();
+        motor.set(true);
+        assert!(!file.exists());
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn dropping_the_motor_switches_it_off() {
+        let path = scratch_dir("motor-drop");
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("motor");
+        let mut motor = Motor::new(file.clone());
+        motor.set(true);
+        drop(motor);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "0");
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn a_motor_that_cannot_be_written_stays_marked_off_so_the_next_call_retries() {
+        let path = scratch_dir("motor-retry");
+        let file = path.join("missing-dir").join("motor");
+        let mut motor = Motor::new(file.clone());
+        motor.set(true);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        motor.set(true);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "1");
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn restoring_a_saved_brightness_with_no_saved_file_does_nothing() {
+        let path = scratch_dir("no-brightness");
+        assert!(restore_saved_brightness(&path.join("absent")).is_ok());
+    }
+
+    #[test]
+    fn a_corrupt_saved_brightness_is_an_error_naming_the_file_and_is_kept() {
+        let path = scratch_dir("bad-brightness");
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("brightness");
+        std::fs::write(&file, "bright").unwrap();
+        let error = restore_saved_brightness(&file).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("brightness"));
+        assert!(file.exists());
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn an_unrestored_backlight_that_never_dimmed_leaves_no_saved_file() {
+        let path = scratch_dir("backlight");
+        std::fs::create_dir_all(&path).unwrap();
+        let file = path.join("brightness");
+        let mut backlight = Backlight::new(file.clone());
+        backlight.undim();
+        backlight.restore();
+        assert!(!file.exists());
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn the_serial_number_is_twelve_hex_digits() {
+        let serial = serial_number();
+        assert_eq!(serial.len(), 12);
+        assert!(serial.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
     use super::*;
 
     fn block_quit_signals() {

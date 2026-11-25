@@ -102,4 +102,56 @@ mod tests {
                 .is_ok()
         );
     }
+
+    #[test]
+    fn a_body_that_never_returns_is_reported_by_name_at_the_deadline() {
+        let release = Arc::new(AtomicBool::new(false));
+        let hold = release.clone();
+        let thread = Interruptible::spawn("stuck", move |_| {
+            while !hold.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        })
+        .unwrap();
+        let result = thread.join_until(Instant::now() + Duration::from_millis(150));
+        release.store(true, Ordering::SeqCst);
+        assert_eq!(result, Err("stuck"));
+    }
+
+    #[test]
+    fn a_body_that_panics_is_reported_by_name() {
+        let thread = Interruptible::spawn("crasher", |_| panic!("boom")).unwrap();
+        let result = thread.join_until(Instant::now() + Duration::from_secs(2));
+        assert_eq!(result, Err("crasher"));
+    }
+
+    #[test]
+    fn the_stop_flag_is_set_before_the_body_is_waited_on() {
+        let thread = Interruptible::spawn("polite", |stopping| {
+            while !stopping.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        })
+        .unwrap();
+        assert!(
+            thread
+                .join_until(Instant::now() + Duration::from_secs(2))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn the_thread_carries_the_name_it_was_spawned_with() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let thread = Interruptible::spawn("named", move |_| {
+            let _ = sender.send(std::thread::current().name().map(str::to_string));
+        })
+        .unwrap();
+        assert_eq!(receiver.recv().unwrap().as_deref(), Some("named"));
+        assert!(
+            thread
+                .join_until(Instant::now() + Duration::from_secs(2))
+                .is_ok()
+        );
+    }
 }
