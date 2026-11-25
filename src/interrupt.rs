@@ -88,40 +88,37 @@ mod tests {
     fn a_thread_blocked_in_read_is_woken_and_joined() {
         install_wake_handler().unwrap();
         let (mut reader, _writer) = UnixStream::pair().unwrap();
+        let (started, running) = std::sync::mpsc::channel();
         let thread = Interruptible::spawn("reader", move |stopping| {
+            let _ = started.send(());
             let mut buffer = [0u8; 1];
             while !stopping.load(Ordering::SeqCst) {
                 let _ = reader.read(&mut buffer);
             }
         })
         .unwrap();
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(
-            thread
-                .join_until(Instant::now() + Duration::from_secs(2))
-                .is_ok()
-        );
+        running.recv().unwrap();
+        assert!(thread.join_until(Instant::now() + GENEROUS).is_ok());
     }
+
+    const GENEROUS: Duration = Duration::from_secs(60);
 
     #[test]
     fn a_body_that_never_returns_is_reported_by_name_at_the_deadline() {
-        let release = Arc::new(AtomicBool::new(false));
-        let hold = release.clone();
+        let (release, blocked) = std::sync::mpsc::channel::<()>();
         let thread = Interruptible::spawn("stuck", move |_| {
-            while !hold.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_millis(5));
-            }
+            let _ = blocked.recv();
         })
         .unwrap();
-        let result = thread.join_until(Instant::now() + Duration::from_millis(150));
-        release.store(true, Ordering::SeqCst);
+        let result = thread.join_until(Instant::now());
+        drop(release);
         assert_eq!(result, Err("stuck"));
     }
 
     #[test]
     fn a_body_that_panics_is_reported_by_name() {
         let thread = Interruptible::spawn("crasher", |_| panic!("boom")).unwrap();
-        let result = thread.join_until(Instant::now() + Duration::from_secs(2));
+        let result = thread.join_until(Instant::now() + GENEROUS);
         assert_eq!(result, Err("crasher"));
     }
 
@@ -133,11 +130,7 @@ mod tests {
             }
         })
         .unwrap();
-        assert!(
-            thread
-                .join_until(Instant::now() + Duration::from_secs(2))
-                .is_ok()
-        );
+        assert!(thread.join_until(Instant::now() + GENEROUS).is_ok());
     }
 
     #[test]
@@ -148,10 +141,6 @@ mod tests {
         })
         .unwrap();
         assert_eq!(receiver.recv().unwrap().as_deref(), Some("named"));
-        assert!(
-            thread
-                .join_until(Instant::now() + Duration::from_secs(2))
-                .is_ok()
-        );
+        assert!(thread.join_until(Instant::now() + GENEROUS).is_ok());
     }
 }

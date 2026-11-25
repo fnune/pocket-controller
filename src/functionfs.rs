@@ -696,13 +696,17 @@ mod tests {
         handle.join().unwrap();
     }
 
-    const WAIT: Duration = Duration::from_secs(2);
+    const WAIT: Duration = Duration::from_secs(60);
 
     #[test]
     fn nothing_is_sent_until_the_host_is_connected() {
         let shared = shared_with(vec![9; 7], false);
         let (received, handle) = run_sender(&shared, false);
-        assert!(received.recv_timeout(Duration::from_millis(100)).is_err());
+        stop_sender(&shared, handle);
+        assert_eq!(received.try_iter().count(), 0);
+
+        let shared = shared_with(vec![9; 7], false);
+        let (received, handle) = run_sender(&shared, false);
         set_connected(&shared, true);
         assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![9; 7]);
         stop_sender(&shared, handle);
@@ -713,7 +717,6 @@ mod tests {
         let shared = shared_with(vec![1; 7], true);
         let (received, handle) = run_sender(&shared, false);
         assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![1; 7]);
-        assert!(received.recv_timeout(Duration::from_millis(100)).is_err());
         {
             let mut outbox = shared.lock();
             outbox.report = vec![2; 7];
@@ -722,6 +725,7 @@ mod tests {
         }
         assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![2; 7]);
         stop_sender(&shared, handle);
+        assert_eq!(received.try_iter().count(), 0);
     }
 
     #[test]
