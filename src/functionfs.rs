@@ -295,7 +295,7 @@ fn set_connected(shared: &Shared, connected: bool) {
 }
 
 fn answer_setup(
-    ep0: &mut File,
+    ep0: &mut (impl Read + Write),
     personality: &dyn Personality,
     setup: &SetupRequest,
     shared: &Shared,
@@ -318,7 +318,7 @@ fn answer_setup(
 }
 
 fn control_loop(
-    mut ep0: File,
+    mut ep0: impl Read + Write,
     personality: &dyn Personality,
     shared: &Shared,
     events: &SessionEvents,
@@ -359,7 +359,7 @@ fn control_loop(
     }
 }
 
-fn send_loop(mut ep_in: File, shared: &Shared, stopping: &AtomicBool) {
+fn send_loop(mut ep_in: impl Write, shared: &Shared, stopping: &AtomicBool) {
     let mut sent_generation = 0;
     loop {
         let report = {
@@ -392,7 +392,7 @@ fn send_loop(mut ep_in: File, shared: &Shared, stopping: &AtomicBool) {
 }
 
 fn receive_loop(
-    mut ep_out: File,
+    mut ep_out: impl Read,
     personality: &dyn Personality,
     events: &SessionEvents,
     stopping: &AtomicBool,
