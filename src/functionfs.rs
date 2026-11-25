@@ -488,4 +488,287 @@ mod tests {
         let events = parse_events(&raw_event(EVENT_DISABLE, [0xff; 8]));
         assert_eq!(events, vec![FunctionEvent::Disable]);
     }
+
+    use std::collections::VecDeque;
+    use std::sync::mpsc;
+
+    struct ScriptedEndpoint {
+        reads: VecDeque<Vec<u8>>,
+        stopping: Arc<AtomicBool>,
+    }
+
+    impl ScriptedEndpoint {
+        fn new(reads: Vec<Vec<u8>>, stopping: &Arc<AtomicBool>) -> Self {
+            Self {
+                reads: reads.into(),
+                stopping: stopping.clone(),
+            }
+        }
+    }
+
+    impl Read for ScriptedEndpoint {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            match self.reads.pop_front() {
+                Some(bytes) => {
+                    buffer[..bytes.len()].copy_from_slice(&bytes);
+                    Ok(bytes.len())
+                }
+                None => {
+                    self.stopping.store(true, Ordering::SeqCst);
+                    Ok(0)
+                }
+            }
+        }
+    }
+
+    fn shared_with(report: Vec<u8>, connected: bool) -> Arc<Shared> {
+        Arc::new(Shared {
+            outbox: Mutex::new(Outbox {
+                report,
+                generation: 1,
+                connected,
+                stopping: false,
+            }),
+            wake: Condvar::new(),
+            stopping: AtomicBool::new(false),
+        })
+    }
+
+    fn events() -> (SessionEvents, mpsc::Receiver<(u64, Input)>) {
+        let (sender, receiver) = mpsc::channel();
+        (
+            SessionEvents {
+                sender,
+                generation: 7,
+            },
+            receiver,
+        )
+    }
+
+    fn run_control(raw: Vec<Vec<u8>>, shared: &Shared) -> (Vec<Input>, Vec<Vec<u8>>) {
+        let stopping = Arc::new(AtomicBool::new(false));
+        let endpoint = ScriptedEndpoint::new(raw, &stopping);
+        let (events, receiver) = events();
+        let personality = personality::for_kind(Kind::Gamepad);
+        let writes = Arc::new(Mutex::new(Vec::new()));
+        struct Tee(ScriptedEndpoint, Arc<Mutex<Vec<Vec<u8>>>>);
+        impl Read for Tee {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                self.0.read(buffer)
+            }
+        }
+        impl Write for Tee {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.1.lock().unwrap().push(bytes.to_vec());
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        control_loop(
+            Tee(endpoint, writes.clone()),
+            personality,
+            shared,
+            &events,
+            &stopping,
+        );
+        drop(events);
+        let inputs = receiver.try_iter().map(|(_, input)| input).collect();
+        let written = writes.lock().unwrap().clone();
+        (inputs, written)
+    }
+
+    #[test]
+    fn enabling_the_function_marks_the_host_connected_and_tells_the_controller() {
+        let shared = shared_with(vec![0; 7], false);
+        let (inputs, _) = run_control(vec![raw_event(EVENT_ENABLE, [0; 8])], &shared);
+        assert_eq!(inputs, vec![Input::HostEnabled]);
+        assert!(shared.lock().connected);
+    }
+
+    #[test]
+    fn disable_and_unbind_both_mark_the_host_gone() {
+        for kind in [EVENT_DISABLE, EVENT_UNBIND] {
+            let shared = shared_with(vec![0; 7], true);
+            let (inputs, _) = run_control(vec![raw_event(kind, [0; 8])], &shared);
+            assert_eq!(inputs, vec![Input::HostDisabled]);
+            assert!(!shared.lock().connected);
+        }
+    }
+
+    #[test]
+    fn suspend_disconnects_and_resume_reconnects() {
+        let shared = shared_with(vec![0; 7], true);
+        let (inputs, _) = run_control(
+            vec![
+                raw_event(EVENT_SUSPEND, [0; 8]),
+                raw_event(EVENT_RESUME, [0; 8]),
+            ],
+            &shared,
+        );
+        assert_eq!(inputs, vec![Input::HostSuspended, Input::HostResumed]);
+        assert!(shared.lock().connected);
+    }
+
+    #[test]
+    fn a_bind_event_changes_nothing() {
+        let shared = shared_with(vec![0; 7], false);
+        let (inputs, written) = run_control(vec![raw_event(EVENT_BIND, [0; 8])], &shared);
+        assert!(inputs.is_empty());
+        assert!(written.is_empty());
+        assert!(!shared.lock().connected);
+    }
+
+    #[test]
+    fn repeating_the_same_connection_state_does_not_wake_the_sender_again() {
+        let shared = shared_with(vec![0; 7], false);
+        run_control(
+            vec![
+                raw_event(EVENT_ENABLE, [0; 8]),
+                raw_event(EVENT_ENABLE, [0; 8]),
+            ],
+            &shared,
+        );
+        assert_eq!(shared.lock().generation, 2);
+    }
+
+    #[test]
+    fn a_get_report_setup_request_is_answered_with_the_current_report() {
+        let report = vec![1, 2, 3, 4, 5, 6, 7];
+        let shared = shared_with(report.clone(), true);
+        let setup = [0xa1, 0x01, 0, 0x01, 0, 0, 7, 0];
+        let (_, written) = run_control(vec![raw_event(EVENT_SETUP, setup)], &shared);
+        assert_eq!(written, vec![report]);
+    }
+
+    #[test]
+    fn an_unsupported_device_to_host_setup_request_is_stalled_by_reading_nothing() {
+        let shared = shared_with(vec![0; 7], true);
+        let setup = [0x80, 0xff, 0, 0, 0, 0, 0, 0];
+        let (_, written) = run_control(vec![raw_event(EVENT_SETUP, setup)], &shared);
+        assert!(written.is_empty());
+    }
+
+    #[test]
+    fn an_unsupported_host_to_device_setup_request_is_stalled_by_writing_nothing() {
+        let shared = shared_with(vec![0; 7], true);
+        let setup = [0x00, 0xff, 0, 0, 0, 0, 0, 0];
+        let (_, written) = run_control(vec![raw_event(EVENT_SETUP, setup)], &shared);
+        assert_eq!(written, vec![Vec::<u8>::new()]);
+    }
+
+    struct ChannelEndpoint {
+        sent: mpsc::Sender<Vec<u8>>,
+        fail_first: bool,
+    }
+
+    impl Write for ChannelEndpoint {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if std::mem::take(&mut self.fail_first) {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            let _ = self.sent.send(bytes.to_vec());
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn run_sender(
+        shared: &Arc<Shared>,
+        fail_first: bool,
+    ) -> (mpsc::Receiver<Vec<u8>>, std::thread::JoinHandle<()>) {
+        let (sent, received) = mpsc::channel();
+        let shared = shared.clone();
+        let handle = std::thread::spawn(move || {
+            let stopping = AtomicBool::new(false);
+            send_loop(ChannelEndpoint { sent, fail_first }, &shared, &stopping);
+        });
+        (received, handle)
+    }
+
+    fn stop_sender(shared: &Shared, handle: std::thread::JoinHandle<()>) {
+        shared.lock().stopping = true;
+        shared.wake.notify_all();
+        handle.join().unwrap();
+    }
+
+    const WAIT: Duration = Duration::from_secs(2);
+
+    #[test]
+    fn nothing_is_sent_until_the_host_is_connected() {
+        let shared = shared_with(vec![9; 7], false);
+        let (received, handle) = run_sender(&shared, false);
+        assert!(received.recv_timeout(Duration::from_millis(100)).is_err());
+        set_connected(&shared, true);
+        assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![9; 7]);
+        stop_sender(&shared, handle);
+    }
+
+    #[test]
+    fn a_new_report_is_sent_once_and_an_identical_one_is_not() {
+        let shared = shared_with(vec![1; 7], true);
+        let (received, handle) = run_sender(&shared, false);
+        assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![1; 7]);
+        assert!(received.recv_timeout(Duration::from_millis(100)).is_err());
+        {
+            let mut outbox = shared.lock();
+            outbox.report = vec![2; 7];
+            outbox.generation += 1;
+            shared.wake.notify_all();
+        }
+        assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![2; 7]);
+        stop_sender(&shared, handle);
+    }
+
+    #[test]
+    fn an_interrupted_write_is_retried_with_the_same_report() {
+        let shared = shared_with(vec![4; 7], true);
+        let (received, handle) = run_sender(&shared, true);
+        assert_eq!(received.recv_timeout(WAIT).unwrap(), vec![4; 7]);
+        stop_sender(&shared, handle);
+    }
+
+    #[test]
+    fn stopping_ends_a_sender_that_has_nothing_to_send() {
+        let shared = shared_with(vec![0; 7], false);
+        let (_received, handle) = run_sender(&shared, false);
+        stop_sender(&shared, handle);
+    }
+
+    #[test]
+    fn host_output_reports_become_controller_inputs_tagged_with_the_session_generation() {
+        let stopping = Arc::new(AtomicBool::new(false));
+        let rumble = vec![0x00, 0x08, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00];
+        let endpoint = ScriptedEndpoint::new(vec![rumble], &stopping);
+        let (events, receiver) = events();
+        receive_loop(
+            endpoint,
+            personality::for_kind(Kind::Xbox),
+            &events,
+            &stopping,
+        );
+        let received: Vec<_> = receiver.try_iter().collect();
+        assert_eq!(received.len(), 2);
+        assert!(received.iter().all(|(generation, _)| *generation == 7));
+        assert_eq!(received[0].1, Input::XboxDriverSpoke);
+        assert!(matches!(received[1].1, Input::Rumble(_)));
+    }
+
+    #[test]
+    fn output_the_personality_does_not_understand_is_dropped() {
+        let stopping = Arc::new(AtomicBool::new(false));
+        let endpoint = ScriptedEndpoint::new(vec![vec![0x00, 0x08, 0x00, 0xff]], &stopping);
+        let (events, receiver) = events();
+        receive_loop(
+            endpoint,
+            personality::for_kind(Kind::Gamepad),
+            &events,
+            &stopping,
+        );
+        assert_eq!(receiver.try_iter().count(), 0);
+    }
 }
