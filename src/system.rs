@@ -94,7 +94,25 @@ const DISP_LCD_SET_BRIGHTNESS: u64 = 0x102;
 const DISP_LCD_GET_BRIGHTNESS: u64 = 0x103;
 const DISPLAY_DEVICE: &str = "/dev/disp";
 
-pub struct Backlight {
+pub trait Panel {
+    fn read(&self) -> io::Result<u32>;
+    fn write(&self, level: u32) -> io::Result<()>;
+}
+
+pub struct RealPanel;
+
+impl Panel for RealPanel {
+    fn read(&self) -> io::Result<u32> {
+        read_brightness()
+    }
+
+    fn write(&self, level: u32) -> io::Result<()> {
+        write_brightness(level)
+    }
+}
+
+pub struct Backlight<P: Panel = RealPanel> {
+    panel: P,
     saved: PathBuf,
     original: Option<u32>,
     session: Option<u32>,
@@ -125,7 +143,14 @@ pub fn write_brightness(level: u32) -> io::Result<()> {
 
 impl Backlight {
     pub fn new(saved: PathBuf) -> Self {
+        Self::with_panel(RealPanel, saved)
+    }
+}
+
+impl<P: Panel> Backlight<P> {
+    pub fn with_panel(panel: P, saved: PathBuf) -> Self {
         Self {
+            panel,
             saved,
             original: None,
             session: None,
@@ -137,7 +162,7 @@ impl Backlight {
         if let Some(original) = self.original {
             return Some(original);
         }
-        match read_brightness() {
+        match self.panel.read() {
             Ok(original) => {
                 if let Err(error) = std::fs::write(&self.saved, original.to_string()) {
                     eprintln!(
@@ -157,7 +182,7 @@ impl Backlight {
     }
 
     fn apply(&self, level: u32) {
-        if let Err(error) = write_brightness(level) {
+        if let Err(error) = self.panel.write(level) {
             eprintln!("could not set the brightness to {level}: {error}");
         }
     }
@@ -178,7 +203,7 @@ impl Backlight {
 
     pub fn restore(&mut self) {
         if let Some(original) = self.original.take() {
-            match write_brightness(original) {
+            match self.panel.write(original) {
                 Ok(()) => {
                     let _ = std::fs::remove_file(&self.saved);
                 }
@@ -190,13 +215,17 @@ impl Backlight {
     }
 }
 
-impl Drop for Backlight {
+impl<P: Panel> Drop for Backlight<P> {
     fn drop(&mut self) {
         self.restore();
     }
 }
 
 pub fn restore_saved_brightness(saved: &Path) -> io::Result<()> {
+    restore_saved_brightness_on(&RealPanel, saved)
+}
+
+fn restore_saved_brightness_on(panel: &impl Panel, saved: &Path) -> io::Result<()> {
     let Ok(text) = std::fs::read_to_string(saved) else {
         return Ok(());
     };
@@ -206,7 +235,7 @@ pub fn restore_saved_brightness(saved: &Path) -> io::Result<()> {
             format!("{}: {error}", saved.display()),
         )
     })?;
-    write_brightness(level)?;
+    panel.write(level)?;
     std::fs::remove_file(saved)
 }
 
