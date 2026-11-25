@@ -4,6 +4,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use pocket_controller::control::{Action, Controller, Input, Kind, Light, Mode, Screen, UsbLink};
+use pocket_controller::evdev::InputDevice;
 use pocket_controller::functionfs::{Session, SessionEvents};
 use pocket_controller::gadget::{self, Layout, PortLease};
 use pocket_controller::interrupt;
@@ -285,44 +286,89 @@ impl Hardware {
     }
 }
 
+fn is_current(generation: u64, current: u64) -> bool {
+    generation == 0 || generation == current
+}
+
+#[derive(Default)]
+struct Pulse {
+    ticks: u32,
+}
+
+impl Pulse {
+    fn next_is_slow(&mut self) -> bool {
+        self.ticks = self.ticks.wrapping_add(1);
+        self.ticks.is_multiple_of(SLOW_TICKS)
+    }
+}
+
+#[derive(Default)]
+struct LinkWatch {
+    was_attached: bool,
+    last_link: Option<UsbLink>,
+}
+
+impl LinkWatch {
+    fn observe(&mut self, power: Option<bool>, controller_state: Option<&str>) -> Vec<Input> {
+        let attached = controller_state.is_some_and(|state| state != NOT_ATTACHED);
+        let unplugged = self.was_attached && !attached;
+        self.was_attached = attached;
+        let link = UsbLink::classify(power, controller_state);
+        let mut inputs = Vec::new();
+        if self.last_link != Some(link) {
+            self.last_link = Some(link);
+            inputs.push(Input::Link(link));
+        }
+        inputs.push(if unplugged {
+            Input::CableUnplugged
+        } else {
+            Input::Tick
+        });
+        inputs
+    }
+}
+
+fn pick_devices(
+    devices: &[InputDevice],
+) -> Result<(InputDevice, Option<InputDevice>), &'static str> {
+    let pad = devices
+        .iter()
+        .find(|device| device.is_gamepad())
+        .cloned()
+        .ok_or("no built-in controller found")?;
+    let power = devices
+        .iter()
+        .find(|device| device.has_power_key())
+        .cloned();
+    Ok((pad, power))
+}
+
+fn resolve_mode(requested: Option<Mode>, saved: Option<Mode>) -> Mode {
+    requested.or(saved).unwrap_or(Mode::Automatic)
+}
+
 fn run_loop(
     hardware: &mut Hardware,
     controller: &mut Controller,
     receiver: &Receiver<(u64, Input)>,
 ) -> Result<(), String> {
-    let mut was_attached = false;
-    let mut last_link = None;
-    let mut ticks: u32 = 0;
+    let mut link_watch = LinkWatch::default();
+    let mut pulse = Pulse::default();
     loop {
         let inputs = match receiver.recv_timeout(TICK) {
-            Ok((generation, input)) if generation == 0 || generation == hardware.generation => {
+            Ok((generation, input)) if is_current(generation, hardware.generation) => {
                 vec![input]
             }
             Ok(_) => continue,
             Err(RecvTimeoutError::Timeout) => {
-                ticks = ticks.wrapping_add(1);
-                if !ticks.is_multiple_of(SLOW_TICKS) {
+                if !pulse.next_is_slow() {
                     vec![Input::Tick]
                 } else {
                     let state = hardware.controller().and_then(|controller| {
                         gadget::controller_state(&hardware.fs, &hardware.layout, controller)
                     });
-                    let attached = state.as_deref().is_some_and(|state| state != NOT_ATTACHED);
-                    let unplugged = was_attached && !attached;
-                    was_attached = attached;
                     hardware.animate();
-                    let link = UsbLink::classify(system::usb_power_online(), state.as_deref());
-                    let mut inputs = Vec::new();
-                    if last_link != Some(link) {
-                        last_link = Some(link);
-                        inputs.push(Input::Link(link));
-                    }
-                    inputs.push(if unplugged {
-                        Input::CableUnplugged
-                    } else {
-                        Input::Tick
-                    });
-                    inputs
+                    link_watch.observe(system::usb_power_online(), state.as_deref())
                 }
             }
             Err(RecvTimeoutError::Disconnected) => return Ok(()),
@@ -366,20 +412,13 @@ fn run(options: Options) -> Result<(), String> {
     system::spawn_quit_signal_waiter(sender.clone()).map_err(|error| error.to_string())?;
     let devices =
         system::find_devices().map_err(|error| format!("could not list input devices: {error}"))?;
-    let pad = devices
-        .iter()
-        .find(|device| device.is_gamepad())
-        .cloned()
-        .ok_or("no built-in controller found")?;
+    let (pad, power) = pick_devices(&devices)?;
     eprintln!(
         "reading the built-in controller {:?} ({})",
         pad.name, pad.event_node
     );
     let state = options.state_dir.map(StateDir::new);
-    let mode = options
-        .mode
-        .or_else(|| state.as_ref().and_then(StateDir::mode))
-        .unwrap_or(Mode::Automatic);
+    let mode = resolve_mode(options.mode, state.as_ref().and_then(StateDir::mode));
     let model = profile::detect(
         std::env::var("DEVICE").ok().as_deref(),
         std::fs::read(TRIMUI_LAUNCHER).ok().as_deref(),
@@ -419,10 +458,7 @@ fn run(options: Options) -> Result<(), String> {
     hardware.lease = Some(lease);
     let result = (|| {
         system::spawn_pad_reader(pad, sender.clone()).map_err(|error| error.to_string())?;
-        if let Some(power) = devices
-            .iter()
-            .find(|device| device.has_power_key())
-            .cloned()
+        if let Some(power) = power
             && let Err(error) = system::spawn_power_reader(power, sender.clone())
         {
             eprintln!("the power button will not quit: {error}");
