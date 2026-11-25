@@ -503,6 +503,119 @@ mod tests {
         parse_options(arguments.iter().map(|argument| argument.to_string()))
     }
 
+    const BRICK_DEVICES: &str = include_str!("../tests/fixtures/brick-input-devices.txt");
+
+    #[test]
+    fn the_brick_yields_its_gamepad_and_a_separate_power_key_device() {
+        let devices = pocket_controller::evdev::parse_devices(BRICK_DEVICES);
+        let (pad, power) = pick_devices(&devices).unwrap();
+        assert_eq!(pad.event_node, "event3");
+        assert_eq!(power.unwrap().event_node, "event1");
+    }
+
+    #[test]
+    fn a_machine_with_no_gamepad_is_refused_with_a_message() {
+        assert_eq!(
+            pick_devices(&[]).unwrap_err(),
+            "no built-in controller found"
+        );
+    }
+
+    #[test]
+    fn a_missing_power_key_device_does_not_block_startup() {
+        let without_power: String = BRICK_DEVICES
+            .split("\n\n")
+            .filter(|block| !block.contains("N: Name=\"axp"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let devices = pocket_controller::evdev::parse_devices(&without_power);
+        assert!(devices.iter().any(InputDevice::is_gamepad));
+        assert!(pick_devices(&devices).unwrap().1.is_none());
+    }
+
+    #[test]
+    fn the_flag_beats_the_saved_mode_which_beats_automatic() {
+        assert_eq!(
+            resolve_mode(Some(Mode::Xbox), Some(Mode::Gamepad)),
+            Mode::Xbox
+        );
+        assert_eq!(resolve_mode(None, Some(Mode::Gamepad)), Mode::Gamepad);
+        assert_eq!(resolve_mode(None, None), Mode::Automatic);
+    }
+
+    #[test]
+    fn input_from_the_current_session_and_from_system_threads_is_accepted() {
+        assert!(is_current(0, 5));
+        assert!(is_current(5, 5));
+    }
+
+    #[test]
+    fn input_from_a_stopped_session_is_ignored() {
+        assert!(!is_current(4, 5));
+    }
+
+    #[test]
+    fn only_every_fifth_tick_is_a_slow_one() {
+        let mut pulse = Pulse::default();
+        let slow: Vec<bool> = (0..10).map(|_| pulse.next_is_slow()).collect();
+        assert_eq!(
+            slow,
+            [
+                false, false, false, false, true, false, false, false, false, true
+            ]
+        );
+    }
+
+    #[test]
+    fn the_first_observation_announces_the_link_and_later_identical_ones_do_not() {
+        let mut watch = LinkWatch::default();
+        assert_eq!(
+            watch.observe(Some(true), None),
+            vec![Input::Link(UsbLink::Powered), Input::Tick]
+        );
+        assert_eq!(watch.observe(Some(true), None), vec![Input::Tick]);
+    }
+
+    #[test]
+    fn a_change_of_link_is_announced_when_it_happens() {
+        let mut watch = LinkWatch::default();
+        watch.observe(Some(true), Some("configured"));
+        assert_eq!(
+            watch.observe(Some(true), Some("addressed")),
+            vec![Input::Link(UsbLink::Enumerating), Input::Tick]
+        );
+    }
+
+    #[test]
+    fn leaving_the_attached_state_reports_the_cable_unplugged_once() {
+        let mut watch = LinkWatch::default();
+        watch.observe(Some(true), Some("configured"));
+        let inputs = watch.observe(Some(false), Some(NOT_ATTACHED));
+        assert_eq!(
+            inputs,
+            vec![Input::Link(UsbLink::NoPower), Input::CableUnplugged]
+        );
+        assert_eq!(
+            watch.observe(Some(false), Some(NOT_ATTACHED)),
+            vec![Input::Tick]
+        );
+    }
+
+    #[test]
+    fn an_unreadable_controller_state_after_attaching_counts_as_unplugged() {
+        let mut watch = LinkWatch::default();
+        watch.observe(Some(true), Some("configured"));
+        let inputs = watch.observe(None, None);
+        assert!(inputs.contains(&Input::CableUnplugged));
+    }
+
+    #[test]
+    fn never_having_been_attached_is_not_an_unplug() {
+        let mut watch = LinkWatch::default();
+        let inputs = watch.observe(Some(false), Some(NOT_ATTACHED));
+        assert!(!inputs.contains(&Input::CableUnplugged));
+    }
+
     #[test]
     fn no_arguments_leave_every_option_unset() {
         let options = parse(&[]).unwrap();
