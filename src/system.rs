@@ -115,7 +115,6 @@ pub struct Backlight<P: Panel = RealPanel> {
     panel: P,
     saved: PathBuf,
     original: Option<u32>,
-    session: Option<u32>,
     dimmed: bool,
 }
 
@@ -153,7 +152,6 @@ impl<P: Panel> Backlight<P> {
             panel,
             saved,
             original: None,
-            session: None,
             dimmed: false,
         }
     }
@@ -196,7 +194,7 @@ impl<P: Panel> Backlight<P> {
 
     pub fn undim(&mut self) {
         self.dimmed = false;
-        if let Some(level) = self.session.or(self.original) {
+        if let Some(level) = self.original {
             self.apply(level);
         }
     }
@@ -210,7 +208,6 @@ impl<P: Panel> Backlight<P> {
                 Err(error) => eprintln!("could not restore the brightness: {error}"),
             }
         }
-        self.session = None;
         self.dimmed = false;
     }
 }
