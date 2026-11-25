@@ -11,6 +11,7 @@ pub mod interrupt;
 pub mod layer;
 pub mod personality;
 pub mod profile;
+pub mod runtime;
 pub mod settings;
 pub mod shortcuts;
 pub mod system;
