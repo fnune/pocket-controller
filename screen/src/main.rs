@@ -281,3 +281,142 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn arguments(list: &[&str]) -> Result<Arguments, String> {
+        parse_arguments(list.iter().map(|argument| argument.to_string()))
+    }
+
+    fn one_unit_per_character(text: &str) -> i32 {
+        text.chars().count() as i32
+    }
+
+    #[test]
+    fn text_that_fits_stays_on_one_line() {
+        assert_eq!(
+            wrap(&one_unit_per_character, "plug in a cable", 40),
+            ["plug in a cable"]
+        );
+    }
+
+    #[test]
+    fn words_move_to_the_next_line_when_the_line_would_overflow() {
+        assert_eq!(
+            wrap(&one_unit_per_character, "plug in a cable", 9),
+            ["plug in a", "cable"]
+        );
+    }
+
+    #[test]
+    fn a_word_wider_than_the_line_gets_a_line_of_its_own() {
+        assert_eq!(
+            wrap(&one_unit_per_character, "a verylongword b", 4),
+            ["a", "verylongword", "b"]
+        );
+    }
+
+    #[test]
+    fn runs_of_whitespace_collapse_and_empty_text_has_no_lines() {
+        assert_eq!(wrap(&one_unit_per_character, "a   b", 10), ["a b"]);
+        assert!(wrap(&one_unit_per_character, "  ", 10).is_empty());
+    }
+
+    #[test]
+    fn a_size_is_width_x_height() {
+        assert_eq!(parse_size("1024x768"), Some((1024, 768)));
+    }
+
+    #[test]
+    fn a_malformed_size_is_rejected() {
+        for text in ["1024", "1024x", "x768", "axb", "1024x768x2"] {
+            assert_eq!(parse_size(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn the_font_is_the_only_required_argument() {
+        let parsed = arguments(&["--font", "/f.ttf"]).unwrap();
+        assert_eq!(parsed.font_path, "/f.ttf");
+        assert_eq!(parsed.assets, None);
+        assert_eq!(parsed.size, None);
+    }
+
+    #[test]
+    fn a_missing_font_is_a_usage_error() {
+        assert_eq!(arguments(&[]).unwrap_err(), USAGE);
+        assert_eq!(arguments(&["--assets", "/a"]).unwrap_err(), USAGE);
+    }
+
+    #[test]
+    fn every_option_is_read() {
+        let parsed = arguments(&[
+            "--font",
+            "/f.ttf",
+            "--assets",
+            "/a",
+            "--device",
+            "brick",
+            "--size",
+            "640x480",
+            "--snapshots",
+            "/s",
+        ])
+        .unwrap();
+        assert_eq!(
+            parsed,
+            Arguments {
+                font_path: "/f.ttf".into(),
+                assets: Some("/a".into()),
+                device_name: Some("brick".into()),
+                size: Some((640, 480)),
+                snapshots: Some("/s".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_option_without_a_value_is_a_usage_error() {
+        assert_eq!(arguments(&["--font"]).unwrap_err(), USAGE);
+    }
+
+    #[test]
+    fn an_unknown_option_is_a_usage_error() {
+        assert_eq!(
+            arguments(&["--font", "/f", "--turbo", "1"]).unwrap_err(),
+            USAGE
+        );
+    }
+
+    #[test]
+    fn a_bad_size_is_a_usage_error() {
+        assert_eq!(
+            arguments(&["--font", "/f", "--size", "big"]).unwrap_err(),
+            USAGE
+        );
+    }
+
+    #[test]
+    fn a_missing_device_manifest_falls_back_to_the_default_device() {
+        assert_eq!(
+            load_device("/nonexistent-assets", "nothing"),
+            Device::default()
+        );
+    }
+
+    #[test]
+    fn a_malformed_device_manifest_falls_back_to_the_default_device() {
+        let directory = std::env::temp_dir().join(format!(
+            "pocket-controller-screen-test-{}",
+            std::process::id()
+        ));
+        let manifest = directory.join("devices/odd");
+        std::fs::create_dir_all(&manifest).unwrap();
+        std::fs::write(manifest.join("manifest"), "image logo notanumber 1\n").unwrap();
+        let loaded = load_device(directory.to_str().unwrap(), "odd");
+        let _ = std::fs::remove_dir_all(&directory);
+        assert_eq!(loaded, Device::default());
+    }
+}

@@ -299,3 +299,24 @@ impl Screen<'_> {
         unsafe { (self.sdl.update_window_surface)(self.window) };
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_library_that_is_not_installed_is_reported_by_name() {
+        let error = Library::open("libpocket-controller-absent.so.0")
+            .err()
+            .unwrap();
+        assert!(
+            error.contains("libpocket-controller-absent.so.0"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_name_with_a_nul_byte_is_an_error_not_a_crash() {
+        assert!(Library::open("lib\0evil.so").is_err());
+    }
+}
