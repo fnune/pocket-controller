@@ -1098,4 +1098,161 @@ mod tests {
         ]);
         assert_eq!(inputs, vec![Input::PowerPressed]);
     }
+
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[derive(Clone)]
+    struct FakePanel {
+        level: Rc<RefCell<u32>>,
+        writes: Rc<RefCell<Vec<u32>>>,
+        readable: bool,
+        writable: bool,
+    }
+
+    impl FakePanel {
+        fn at(level: u32) -> Self {
+            Self {
+                level: Rc::new(RefCell::new(level)),
+                writes: Rc::new(RefCell::new(Vec::new())),
+                readable: true,
+                writable: true,
+            }
+        }
+    }
+
+    impl Panel for FakePanel {
+        fn read(&self) -> io::Result<u32> {
+            if self.readable {
+                Ok(*self.level.borrow())
+            } else {
+                Err(io::Error::other("no display"))
+            }
+        }
+
+        fn write(&self, level: u32) -> io::Result<()> {
+            if !self.writable {
+                return Err(io::Error::other("display refused"));
+            }
+            *self.level.borrow_mut() = level;
+            self.writes.borrow_mut().push(level);
+            Ok(())
+        }
+    }
+
+    fn saved_file(label: &str) -> PathBuf {
+        let directory = scratch_dir(label);
+        std::fs::create_dir_all(&directory).unwrap();
+        directory.join("brightness")
+    }
+
+    #[test]
+    fn dimming_saves_the_original_level_before_changing_it() {
+        let panel = FakePanel::at(80);
+        let file = saved_file("dim-saves");
+        let mut backlight = Backlight::with_panel(panel.clone(), file.clone());
+        backlight.dim(10);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "80");
+        assert_eq!(*panel.level.borrow(), 10);
+    }
+
+    #[test]
+    fn dimming_twice_keeps_the_first_original() {
+        let panel = FakePanel::at(80);
+        let file = saved_file("dim-twice");
+        let mut backlight = Backlight::with_panel(panel.clone(), file.clone());
+        backlight.dim(10);
+        backlight.dim(0);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "80");
+        assert_eq!(*panel.writes.borrow(), vec![10, 0]);
+    }
+
+    #[test]
+    fn undimming_returns_to_the_original_level() {
+        let panel = FakePanel::at(80);
+        let mut backlight = Backlight::with_panel(panel.clone(), saved_file("undim"));
+        backlight.dim(10);
+        backlight.undim();
+        assert_eq!(*panel.level.borrow(), 80);
+    }
+
+    #[test]
+    fn restoring_returns_the_level_and_deletes_the_saved_file() {
+        let panel = FakePanel::at(80);
+        let file = saved_file("restore");
+        let mut backlight = Backlight::with_panel(panel.clone(), file.clone());
+        backlight.dim(0);
+        backlight.restore();
+        assert_eq!(*panel.level.borrow(), 80);
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn dropping_a_dimmed_backlight_restores_the_level() {
+        let panel = FakePanel::at(80);
+        let mut backlight = Backlight::with_panel(panel.clone(), saved_file("drop"));
+        backlight.dim(0);
+        drop(backlight);
+        assert_eq!(*panel.level.borrow(), 80);
+    }
+
+    #[test]
+    fn restoring_twice_writes_the_level_once() {
+        let panel = FakePanel::at(80);
+        let mut backlight = Backlight::with_panel(panel.clone(), saved_file("restore-twice"));
+        backlight.dim(0);
+        backlight.restore();
+        backlight.restore();
+        assert_eq!(*panel.writes.borrow(), vec![0, 80]);
+    }
+
+    #[test]
+    fn a_display_that_cannot_be_read_is_never_dimmed() {
+        let mut panel = FakePanel::at(80);
+        panel.readable = false;
+        let mut backlight = Backlight::with_panel(panel.clone(), saved_file("unreadable"));
+        backlight.dim(0);
+        assert!(panel.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_level_that_cannot_be_saved_is_never_dimmed() {
+        let panel = FakePanel::at(80);
+        let unwritable = scratch_dir("no-dir").join("missing").join("brightness");
+        let mut backlight = Backlight::with_panel(panel.clone(), unwritable);
+        backlight.dim(0);
+        assert!(panel.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_failed_restore_keeps_the_saved_file_so_recovery_can_try_again() {
+        let mut panel = FakePanel::at(80);
+        let file = saved_file("failed-restore");
+        let mut backlight = Backlight::with_panel(panel.clone(), file.clone());
+        backlight.dim(0);
+        panel.writable = false;
+        backlight.panel = panel;
+        backlight.restore();
+        assert!(file.exists());
+    }
+
+    #[test]
+    fn recovery_writes_the_saved_level_and_deletes_the_file() {
+        let panel = FakePanel::at(0);
+        let file = saved_file("recover");
+        std::fs::write(&file, "80\n").unwrap();
+        restore_saved_brightness_on(&panel, &file).unwrap();
+        assert_eq!(*panel.level.borrow(), 80);
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn recovery_with_a_display_that_refuses_keeps_the_file() {
+        let mut panel = FakePanel::at(0);
+        panel.writable = false;
+        let file = saved_file("recover-refused");
+        std::fs::write(&file, "80").unwrap();
+        assert!(restore_saved_brightness_on(&panel, &file).is_err());
+        assert!(file.exists());
+    }
 }
