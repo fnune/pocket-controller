@@ -876,4 +876,197 @@ mod tests {
         let elapsed = started.elapsed();
         assert!(elapsed >= Duration::from_millis(180) && elapsed < Duration::from_secs(2));
     }
+
+    use crate::xinput;
+    use std::collections::VecDeque;
+    use std::sync::mpsc;
+
+    struct ScriptedPad {
+        reads: VecDeque<io::Result<Vec<u8>>>,
+        resyncs: std::cell::Cell<u32>,
+    }
+
+    impl ScriptedPad {
+        fn new(reads: Vec<io::Result<Vec<u8>>>) -> Self {
+            Self {
+                reads: reads.into(),
+                resyncs: std::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl Read for ScriptedPad {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            match self.reads.pop_front() {
+                Some(Ok(bytes)) => {
+                    buffer[..bytes.len()].copy_from_slice(&bytes);
+                    Ok(bytes.len())
+                }
+                Some(Err(error)) => Err(error),
+                None => Err(io::ErrorKind::BrokenPipe.into()),
+            }
+        }
+    }
+
+    impl PadSource for ScriptedPad {
+        fn resync(&self, reader: &mut PadReader) {
+            self.resyncs.set(self.resyncs.get() + 1);
+            reader.set_held_keys(|code| code == evdev::BTN_B);
+        }
+    }
+
+    fn chunk(events: &[Event]) -> io::Result<Vec<u8>> {
+        Ok(events.iter().flat_map(|event| event.encode()).collect())
+    }
+
+    fn syn(code: u16) -> Event {
+        Event {
+            kind: evdev::EV_SYN,
+            code,
+            value: 0,
+        }
+    }
+
+    fn run_pad(reads: Vec<io::Result<Vec<u8>>>) -> Vec<Input> {
+        let (sender, receiver) = mpsc::channel();
+        pad_loop(ScriptedPad::new(reads), PadReader::default(), &sender);
+        receiver.try_iter().map(|(_, input)| input).collect()
+    }
+
+    fn pad_buttons(input: &Input) -> u16 {
+        match input {
+            Input::Pad(pad) => pad.state.buttons,
+            other => panic!("expected a pad, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_press_is_reported_when_the_report_is_complete() {
+        let inputs = run_pad(vec![chunk(&[
+            Event::key(evdev::BTN_A, true),
+            Event::sync(),
+        ])]);
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(pad_buttons(&inputs[0]), xinput::A);
+        assert_eq!(inputs[1], Input::QuitRequested);
+    }
+
+    #[test]
+    fn events_without_a_sync_report_are_held_back() {
+        let inputs = run_pad(vec![chunk(&[Event::key(evdev::BTN_A, true)])]);
+        assert_eq!(inputs, vec![Input::QuitRequested]);
+    }
+
+    #[test]
+    fn a_report_split_across_reads_is_still_one_pad() {
+        let inputs = run_pad(vec![
+            chunk(&[Event::key(evdev::BTN_A, true)]),
+            chunk(&[Event::sync()]),
+        ]);
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(pad_buttons(&inputs[0]), xinput::A);
+    }
+
+    #[test]
+    fn after_the_kernel_drops_events_the_pad_is_reloaded_from_the_device() {
+        let (sender, receiver) = mpsc::channel();
+        let source = ScriptedPad::new(vec![chunk(&[
+            Event::key(evdev::BTN_A, true),
+            syn(evdev::SYN_DROPPED),
+            Event::key(evdev::BTN_X, true),
+            Event::sync(),
+        ])]);
+        pad_loop(source, PadReader::default(), &sender);
+        let inputs: Vec<_> = receiver.try_iter().map(|(_, input)| input).collect();
+        assert_eq!(pad_buttons(&inputs[0]), xinput::B);
+    }
+
+    #[test]
+    fn a_dropped_marker_alone_reports_nothing_until_the_next_sync() {
+        let inputs = run_pad(vec![chunk(&[syn(evdev::SYN_DROPPED)])]);
+        assert_eq!(inputs, vec![Input::QuitRequested]);
+    }
+
+    #[test]
+    fn an_interrupted_read_is_retried() {
+        let inputs = run_pad(vec![
+            Err(io::ErrorKind::Interrupted.into()),
+            chunk(&[Event::key(evdev::BTN_A, true), Event::sync()]),
+        ]);
+        assert_eq!(pad_buttons(&inputs[0]), xinput::A);
+    }
+
+    #[test]
+    fn losing_the_device_asks_the_controller_to_quit() {
+        let inputs = run_pad(vec![Err(io::ErrorKind::NotConnected.into())]);
+        assert_eq!(inputs, vec![Input::QuitRequested]);
+    }
+
+    #[test]
+    fn the_pad_loop_ends_when_nobody_is_listening() {
+        let (sender, receiver) = mpsc::channel();
+        drop(receiver);
+        let source = ScriptedPad::new(vec![
+            chunk(&[Event::key(evdev::BTN_A, true), Event::sync()]),
+            Err(io::Error::other("must not be read")),
+        ]);
+        pad_loop(source, PadReader::default(), &sender);
+    }
+
+    struct ScriptedStream(VecDeque<io::Result<Vec<u8>>>);
+
+    impl Read for ScriptedStream {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            match self.0.pop_front() {
+                Some(Ok(bytes)) => {
+                    buffer[..bytes.len()].copy_from_slice(&bytes);
+                    Ok(bytes.len())
+                }
+                Some(Err(error)) => Err(error),
+                None => Err(io::ErrorKind::BrokenPipe.into()),
+            }
+        }
+    }
+
+    fn run_power(reads: Vec<io::Result<Vec<u8>>>) -> Vec<Input> {
+        let (sender, receiver) = mpsc::channel();
+        power_loop(ScriptedStream(reads.into()), &sender);
+        receiver.try_iter().map(|(_, input)| input).collect()
+    }
+
+    fn power(value: i32) -> Event {
+        Event {
+            kind: evdev::EV_KEY,
+            code: evdev::KEY_POWER,
+            value,
+        }
+    }
+
+    #[test]
+    fn pressing_power_is_reported_once() {
+        assert_eq!(
+            run_power(vec![chunk(&[power(1)])]),
+            vec![Input::PowerPressed]
+        );
+    }
+
+    #[test]
+    fn releasing_or_holding_power_is_not_a_press() {
+        assert!(run_power(vec![chunk(&[power(0)]), chunk(&[power(2)])]).is_empty());
+    }
+
+    #[test]
+    fn other_keys_are_not_a_power_press() {
+        let volume = Event::key(evdev::KEY_VOLUMEUP, true);
+        assert!(run_power(vec![chunk(&[volume])]).is_empty());
+    }
+
+    #[test]
+    fn the_power_loop_survives_an_interrupted_read_and_ends_on_a_real_error() {
+        let inputs = run_power(vec![
+            Err(io::ErrorKind::Interrupted.into()),
+            chunk(&[power(1)]),
+        ]);
+        assert_eq!(inputs, vec![Input::PowerPressed]);
+    }
 }
