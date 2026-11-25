@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::mpsc;
-use std::time::Instant;
 
-use pocket_controller::control::{Controller, Mode};
+use pocket_controller::control::Mode;
 use pocket_controller::evdev::InputDevice;
 use pocket_controller::gadget::{self, Layout, PortLease};
 use pocket_controller::interrupt;
 use pocket_controller::profile;
-use pocket_controller::runtime::{Hardware, Notice, RealHelpers, RealSessions, run_loop};
+use pocket_controller::runtime::{Hardware, Notice, RealHelpers, RealSessions, serve};
 use pocket_controller::system::{
     self, Backlight, Motor, Panel, Presenter, RealFs, RealPanel, StateDir,
 };
@@ -143,26 +142,15 @@ fn run(options: Options) -> Result<(), String> {
         snapshot.gadget, snapshot.controller, snapshot.created_by_us
     );
     hardware.lease = Some(lease);
-    let result = (|| {
+    serve(&mut hardware, mode, &receiver, || {
         system::spawn_pad_reader(pad, sender.clone()).map_err(|error| error.to_string())?;
         if let Some(power) = power
             && let Err(error) = system::spawn_power_reader(power, sender.clone())
         {
             eprintln!("the power button will not quit: {error}");
         }
-        let saved = hardware
-            .state
-            .as_ref()
-            .map(StateDir::saved)
-            .unwrap_or_default();
-        let (mut controller, actions) = Controller::with_saved(mode, saved, Instant::now());
-        for action in actions {
-            hardware.apply(action)?;
-        }
-        run_loop(&mut hardware, &mut controller, &receiver)
-    })();
-    hardware.shut_down();
-    result
+        Ok(())
+    })
 }
 
 fn main() -> ExitCode {

@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use crate::control::{
-    Action, Controller, DebugView, Input, Kind, Light, LiveView, Screen, SheetView, UsbLink,
+    Action, Controller, DebugView, Input, Kind, Light, LiveView, Mode, Screen, SheetView, UsbLink,
 };
 use crate::functionfs::{Session, SessionEvents};
 use crate::gadget::{self, GadgetFs, Layout, PortLease};
@@ -466,6 +466,29 @@ pub fn run_loop(
             }
         }
     }
+}
+
+pub fn serve(
+    hardware: &mut Hardware,
+    mode: Mode,
+    receiver: &Receiver<(u64, Input)>,
+    spawn_readers: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let result = (|| {
+        spawn_readers()?;
+        let saved = hardware
+            .state
+            .as_ref()
+            .map(StateDir::saved)
+            .unwrap_or_default();
+        let (mut controller, actions) = Controller::with_saved(mode, saved, Instant::now());
+        for action in actions {
+            hardware.apply(action)?;
+        }
+        run_loop(hardware, &mut controller, receiver)
+    })();
+    hardware.shut_down();
+    result
 }
 
 fn handle(
