@@ -72,11 +72,11 @@ impl Fonts {
     }
 }
 
-fn wrap(screen: &Screen, font: *mut Font, text: &str, max_width: i32) -> Vec<String> {
+fn wrap(measure: &dyn Fn(&str) -> i32, text: &str, max_width: i32) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for word in text.split_whitespace() {
         match lines.last_mut() {
-            Some(last) if screen.text_size(font, &format!("{last} {word}")).0 <= max_width => {
+            Some(last) if measure(&format!("{last} {word}")) <= max_width => {
                 last.push(' ');
                 last.push_str(word);
             }
@@ -155,7 +155,7 @@ fn draw(screen: &Screen, fonts: &Fonts, images: &Images, ops: &[Op]) {
             } => {
                 let font = fonts.get(*role);
                 let mut top = None;
-                for line in wrap(screen, font, text, max_width) {
+                for line in wrap(&|line| screen.text_size(font, line).0, text, max_width) {
                     let (line_width, line_height) = screen.text_size(font, &line);
                     let line_top = *top.get_or_insert(y - line_height / 2);
                     let left = match align {
@@ -173,20 +173,13 @@ fn draw(screen: &Screen, fonts: &Fonts, images: &Images, ops: &[Op]) {
 }
 
 fn run() -> Result<(), String> {
-    let mut arguments = std::env::args().skip(1);
-    let (mut font_path, mut assets, mut device_name) = (None, None, None);
-    let (mut size, mut snapshots) = (None, None);
-    while let Some(argument) = arguments.next() {
-        match (argument.as_str(), arguments.next()) {
-            ("--font", Some(path)) => font_path = Some(path),
-            ("--assets", Some(path)) => assets = Some(path),
-            ("--device", Some(name)) => device_name = Some(name),
-            ("--size", Some(text)) => size = Some(parse_size(&text).ok_or(USAGE)?),
-            ("--snapshots", Some(path)) => snapshots = Some(path),
-            _ => return Err(USAGE.to_string()),
-        }
-    }
-    let font_path = font_path.ok_or(USAGE)?;
+    let Arguments {
+        font_path,
+        assets,
+        device_name,
+        size,
+        snapshots,
+    } = parse_arguments(std::env::args().skip(1))?;
     let sdl = Sdl::load()?;
     let screen = sdl.open_screen(size)?;
     let (width, height) = screen.size();
@@ -240,6 +233,38 @@ fn run() -> Result<(), String> {
         screen.present();
     }
     Ok(())
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Arguments {
+    font_path: String,
+    assets: Option<String>,
+    device_name: Option<String>,
+    size: Option<(i32, i32)>,
+    snapshots: Option<String>,
+}
+
+fn parse_arguments(arguments: impl Iterator<Item = String>) -> Result<Arguments, String> {
+    let mut arguments = arguments;
+    let (mut font_path, mut assets, mut device_name) = (None, None, None);
+    let (mut size, mut snapshots) = (None, None);
+    while let Some(argument) = arguments.next() {
+        match (argument.as_str(), arguments.next()) {
+            ("--font", Some(path)) => font_path = Some(path),
+            ("--assets", Some(path)) => assets = Some(path),
+            ("--device", Some(name)) => device_name = Some(name),
+            ("--size", Some(text)) => size = Some(parse_size(&text).ok_or(USAGE)?),
+            ("--snapshots", Some(path)) => snapshots = Some(path),
+            _ => return Err(USAGE.to_string()),
+        }
+    }
+    Ok(Arguments {
+        font_path: font_path.ok_or(USAGE)?,
+        assets,
+        device_name,
+        size,
+        snapshots,
+    })
 }
 
 fn parse_size(text: &str) -> Option<(i32, i32)> {
