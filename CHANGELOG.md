@@ -1,3 +1,9 @@
+## [0.3.0] - 2026-11-27
+
+### Features
+
+- Set the D-pad mode in settings and open Debug with Y
+
 ## [0.2.0] - 2026-11-27
 
 - A Shoulder buttons setting that swaps L1 and R1 with L2 and R2, which puts LT and RT on the outer back buttons of the Brick
