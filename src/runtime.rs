@@ -1197,6 +1197,7 @@ mod tests {
         let mut rig = Rig::new("saves").with_state();
         let settings = crate::settings::Settings {
             face: crate::layer::FaceLayout::Position,
+            shoulders: crate::layer::ShoulderLayout::Swapped,
             rumble: false,
             screen: crate::settings::ScreenWhilePlaying::AlwaysOn,
         };

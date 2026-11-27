@@ -13,7 +13,7 @@ use crate::control::{DebugView, Input, LiveView, Mode, Saved, Screen, SheetView}
 use crate::evdev::{self, AbsRange, Event, InputDevice, PadReader};
 use crate::frame::Frame;
 use crate::gadget::GadgetFs;
-use crate::layer::{DpadMode, FaceLayout};
+use crate::layer::{DpadMode, FaceLayout, ShoulderLayout};
 use crate::settings::{ScreenWhilePlaying, Settings, SettingsView};
 use crate::xinput::EndpointBudget;
 
@@ -675,6 +675,10 @@ impl StateDir {
                     .read("face")
                     .and_then(|text| FaceLayout::parse(&text))
                     .unwrap_or(defaults.face),
+                shoulders: self
+                    .read("shoulders")
+                    .and_then(|text| ShoulderLayout::parse(&text))
+                    .unwrap_or(defaults.shoulders),
                 rumble: self
                     .read("rumble")
                     .map_or(defaults.rumble, |text| text.trim() != "off"),
@@ -692,6 +696,7 @@ impl StateDir {
 
     pub fn save_settings(&self, settings: Settings) {
         self.write("face", settings.face.as_str());
+        self.write("shoulders", settings.shoulders.as_str());
         self.write("rumble", if settings.rumble { "on" } else { "off" });
         self.write("screen", settings.screen.as_str());
     }
@@ -752,6 +757,7 @@ mod tests {
         let state = StateDir::new(path.clone());
         let settings = Settings {
             face: FaceLayout::Position,
+            shoulders: ShoulderLayout::Swapped,
             rumble: false,
             screen: ScreenWhilePlaying::OffAfter,
         };

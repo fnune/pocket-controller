@@ -15,6 +15,7 @@ RELEASE = "target/aarch64-unknown-linux-musl/release"
 PAD = "/dev/input/event3"
 EV_KEY, EV_ABS = 1, 3
 BTN_A, BTN_SELECT, BTN_START, BTN_MODE = 0x130, 0x13A, 0x13B, 0x13C
+BTN_TL = 0x136
 PRINTED_A = 0x131
 ABS_Z, ABS_HAT0X, ABS_HAT0Y = 0x02, 0x10, 0x11
 
@@ -105,8 +106,8 @@ def quit_with_chord() -> None:
     inject(f"key:{BTN_SELECT:#x}:0", f"key:{BTN_START:#x}:0")
 
 
-def scenario(mode: str, vendor: str, product: str, checks: Callable[[str], None]) -> None:
-    print(f"{mode}:")
+def scenario(mode: str, vendor: str, product: str, checks: Callable[[str], None], label: str | None = None) -> None:
+    print(f"{label or mode}:")
     start(mode)
     node = host_device(vendor, product)
     expect(f"laptop sees {vendor}:{product}", node is not None)
@@ -152,6 +153,20 @@ def gamepad_checks(node: str) -> None:
     expect("screen says connected as gamepad", "Connected as a generic gamepad" in screens(), screens())
 
 
+def swapped_shoulder_checks(node: str) -> None:
+    events = read_events(node, press(BTN_TL))
+    expect("L1 sends the left trigger", (EV_ABS, ABS_Z, 255) in events, str(events))
+    expect("L1 does not send LB", not any(event[1] == BTN_TL for event in events), str(events))
+    events = read_events(node, lambda: (inject(f"abs:{ABS_Z:#x}:255"), time.sleep(0.15), inject(f"abs:{ABS_Z:#x}:0")))
+    expect("L2 sends LB", (EV_KEY, BTN_TL, 1) in events and (EV_KEY, BTN_TL, 0) in events, str(events))
+
+
+def shoulders_scenario() -> None:
+    _ = brick("rm -rf /tmp/pocket-controller-e2e-state && mkdir -p /tmp/pocket-controller-e2e-state && printf swapped > /tmp/pocket-controller-e2e-state/shoulders")
+    scenario("xbox", "045e", "028e", swapped_shoulder_checks, label="swapped shoulders")
+    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
+
+
 def hat(axis: int, value: int) -> None:
     _ = brick(
         f"/tmp/pocket-controller-inject {PAD} abs:{axis:#x}:{value} && sleep 0.1 && "
@@ -180,7 +195,7 @@ def settings_scenario() -> None:
         expect("settings keep buttons from the laptop", not pressed, str(events))
         log = brick("cat /tmp/pocket-controller.log")
         expect("settings open on the face buttons row", "cursor: Face" in log, log[-400:])
-        for _ in range(3):
+        for _ in range(4):
             hat(ABS_HAT0Y, 1)
         hat(ABS_HAT0X, 1)
         hat(ABS_HAT0X, 1)
@@ -214,6 +229,7 @@ def main() -> None:
     scenario("xbox", "045e", "028e", xbox_checks)
     scenario("gamepad", "1d6b", "0105", gamepad_checks)
     scenario("automatic", "045e", "028e", xbox_checks)
+    shoulders_scenario()
     settings_scenario()
     print("all passed" if not failures else f"{len(failures)} failed: {', '.join(failures)}")
     sys.exit(1 if failures else 0)

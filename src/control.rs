@@ -305,7 +305,8 @@ impl Controller {
             debug_shown: None,
             last_rumble: 0,
             budget: None,
-            layer: Layer::new(saved.settings.face, saved.dpad, now),
+            layer: Layer::new(saved.settings.face, saved.dpad, now)
+                .with_shoulders(saved.settings.shoulders),
             extras: Extras::default(),
             last_sent: None,
             sheet: None,
@@ -472,6 +473,7 @@ impl Controller {
 
     fn settings_changed(&mut self, actions: &mut Vec<Action>) {
         self.layer.face = self.settings.face;
+        self.layer.shoulders = self.settings.shoulders;
         if !self.settings.rumble {
             actions.push(Action::Motor(false));
         }
@@ -1208,6 +1210,37 @@ mod tests {
             });
             assert_eq!(light, expected, "{screen:?}");
         }
+    }
+
+    #[test]
+    fn saved_swapped_shoulders_apply_while_the_drawing_lights_the_pressed_button() {
+        let start = Instant::now();
+        let saved = Saved {
+            settings: Settings {
+                shoulders: crate::layer::ShoulderLayout::Swapped,
+                ..Settings::default()
+            },
+            dpad: DpadMode::Dpad,
+        };
+        let (mut controller, _) = Controller::with_saved(Mode::Xbox, saved, start);
+        controller.handle(Input::HostEnabled, start);
+        let actions = controller.handle(holding(xinput::LEFT_SHOULDER), start);
+        let sent = actions.iter().find_map(|action| match action {
+            Action::Report(state) => Some(*state),
+            _ => None,
+        });
+        assert_eq!(
+            sent.map(|state| (state.buttons, state.left_trigger)),
+            Some((0, 255))
+        );
+        let live = actions.iter().find_map(|action| match action {
+            Action::Live(view) => Some(*view),
+            _ => None,
+        });
+        assert_eq!(
+            live.map(|view| (view.buttons, view.left_trigger)),
+            Some((xinput::LEFT_SHOULDER, false))
+        );
     }
 
     #[test]

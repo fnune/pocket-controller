@@ -1,5 +1,5 @@
 use crate::control::{DebugView, Diagnosis, Kind, LiveView, Mode, Screen, SheetView, UsbLink};
-use crate::layer::{DpadMode, FaceLayout, Turbo};
+use crate::layer::{DpadMode, FaceLayout, ShoulderLayout, Turbo};
 use crate::settings::{Row, ScreenWhilePlaying, Settings, SettingsView};
 use crate::xinput::{self, EndpointBudget, State};
 
@@ -110,6 +110,7 @@ fn serialize_settings(view: &SettingsView) -> String {
     [
         view.cursor.as_str(),
         view.settings.face.as_str(),
+        view.settings.shoulders.as_str(),
         flag(view.settings.rumble),
         view.settings.screen.as_str(),
         view.mode.as_str(),
@@ -126,6 +127,7 @@ fn parse_settings(text: &str) -> Option<SettingsView> {
         cursor: Row::parse(parts.next()?)?,
         settings: Settings {
             face: FaceLayout::parse(parts.next()?)?,
+            shoulders: ShoulderLayout::parse(parts.next()?)?,
             rumble: parse_flag(parts.next())?,
             screen: ScreenWhilePlaying::parse(parts.next()?)?,
         },
@@ -454,6 +456,7 @@ mod tests {
                 cursor: Row::Mode,
                 settings: Settings {
                     face: FaceLayout::Position,
+                    shoulders: ShoulderLayout::Swapped,
                     rumble: false,
                     screen: ScreenWhilePlaying::OffAfter,
                 },

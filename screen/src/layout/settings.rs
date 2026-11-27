@@ -2,8 +2,9 @@ use super::*;
 use pocket_controller::layer::FaceLayout;
 use pocket_controller::settings::{
     DEBUG_DETAIL, DEBUG_VALUE, FACE_VALUES, MODE_CHANGE_WARNING, MODE_VALUES, RUMBLE_UNAVAILABLE,
-    RUMBLE_UNAVAILABLE_DETAIL, RUMBLE_VALUES, Row, ScreenWhilePlaying, SettingsView, face_detail,
-    face_label, mode_detail, rumble_available, rumble_detail, rumble_label, screen_detail,
+    RUMBLE_UNAVAILABLE_DETAIL, RUMBLE_VALUES, Row, SHOULDER_VALUES, ScreenWhilePlaying,
+    SettingsView, face_detail, face_label, mode_detail, rumble_available, rumble_detail,
+    rumble_label, screen_detail, shoulder_detail, shoulder_label,
 };
 
 pub(super) const LIST_LEFT: i32 = 40;
@@ -14,12 +15,12 @@ pub(super) const ROW_PITCH: i32 = 84;
 pub(super) const ROW_TEXT_LEFT: i32 = LIST_LEFT + 28;
 pub(super) const ROW_LABEL_Y: i32 = 25;
 pub(super) const ROW_VALUE_Y: i32 = 54;
-pub(super) const VERSION_Y: i32 = ROWS_TOP + 5 * ROW_PITCH + 28;
+pub(super) const VERSION_Y: i32 = ROWS_TOP + Row::ALL.len() as i32 * ROW_PITCH + 28;
 
 pub(super) const PANEL_LEFT: i32 = 456;
 pub(super) const PANEL_TOP: i32 = 72;
 pub(super) const PANEL_WIDTH: i32 = 528;
-pub(super) const PANEL_HEIGHT: i32 = 412;
+pub(super) const PANEL_HEIGHT: i32 = Row::ALL.len() as i32 * ROW_PITCH - (ROW_PITCH - ROW_HEIGHT);
 pub(super) const PANEL_PADDING: i32 = 32;
 pub(super) const PANEL_TEXT_WIDTH: i32 = PANEL_WIDTH - 2 * PANEL_PADDING;
 pub(super) const CARDS_TOP: i32 = PANEL_TOP + PANEL_PADDING;
@@ -71,6 +72,7 @@ pub(super) fn wrap_to_width(
 pub(super) fn row_label(row: Row) -> &'static str {
     match row {
         Row::Face => "Face buttons",
+        Row::Shoulders => "Shoulder buttons",
         Row::Rumble => "Rumble",
         Row::Screen => "Screen while playing",
         Row::Mode => "Mode",
@@ -81,6 +83,7 @@ pub(super) fn row_label(row: Row) -> &'static str {
 fn row_value(view: &SettingsView, row: Row) -> (&'static str, bool) {
     match row {
         Row::Face => (face_label(view.settings.face), true),
+        Row::Shoulders => (shoulder_label(view.settings.shoulders), true),
         Row::Rumble if !rumble_available(view.kind) => (RUMBLE_UNAVAILABLE, false),
         Row::Rumble => (rumble_label(view.settings.rumble), true),
         Row::Screen => (view.settings.screen.label(), true),
@@ -106,6 +109,15 @@ pub(super) fn choices(view: &SettingsView) -> Vec<Choice> {
             .iter()
             .map(|face| plain(face_label(*face), *face == view.settings.face))
             .collect(),
+        Row::Shoulders => SHOULDER_VALUES
+            .iter()
+            .map(|shoulders| {
+                plain(
+                    shoulder_label(*shoulders),
+                    *shoulders == view.settings.shoulders,
+                )
+            })
+            .collect(),
         Row::Rumble if rumble_available(view.kind) => RUMBLE_VALUES
             .iter()
             .map(|on| plain(rumble_label(*on), *on == view.settings.rumble))
@@ -129,6 +141,7 @@ pub(super) fn choices(view: &SettingsView) -> Vec<Choice> {
 pub(super) fn detail(view: &SettingsView) -> &'static str {
     match view.cursor {
         Row::Face => face_detail(view.settings.face),
+        Row::Shoulders => shoulder_detail(view.settings.shoulders),
         Row::Rumble if !rumble_available(view.kind) => RUMBLE_UNAVAILABLE_DETAIL,
         Row::Rumble => rumble_detail(view.settings.rumble),
         Row::Screen => screen_detail(view.settings.screen),

@@ -65,6 +65,30 @@ impl FaceLayout {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ShoulderLayout {
+    #[default]
+    Printed,
+    Swapped,
+}
+
+impl ShoulderLayout {
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim() {
+            "printed" => Some(Self::Printed),
+            "swapped" => Some(Self::Swapped),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Printed => "printed",
+            Self::Swapped => "swapped",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Turbo {
     pub buttons: u16,
     pub left_trigger: bool,
@@ -89,6 +113,7 @@ pub struct LayerOutput {
 #[derive(Debug)]
 pub struct Layer {
     pub face: FaceLayout,
+    pub shoulders: ShoulderLayout,
     pub dpad_mode: DpadMode,
     pub turbo: Turbo,
     epoch: Instant,
@@ -115,6 +140,7 @@ impl Layer {
     pub fn new(face: FaceLayout, dpad_mode: DpadMode, now: Instant) -> Self {
         Self {
             face,
+            shoulders: ShoulderLayout::default(),
             dpad_mode,
             turbo: Turbo::default(),
             epoch: now,
@@ -126,6 +152,10 @@ impl Layer {
             triggers_withheld: (false, false),
             guide_until: None,
         }
+    }
+
+    pub fn with_shoulders(self, shoulders: ShoulderLayout) -> Self {
+        Self { shoulders, ..self }
     }
 
     pub fn sheet_shown(&self) -> bool {
@@ -281,6 +311,30 @@ impl Layer {
         );
     }
 
+    fn apply_shoulder_layout(&self, sent: &mut State) {
+        if self.shoulders == ShoulderLayout::Printed {
+            return;
+        }
+        let swap = |buttons: &mut u16, trigger: &mut u8, bumper: u16| {
+            let bumper_held = *buttons & bumper != 0;
+            *buttons &= !bumper;
+            if *trigger > TRIGGER_PRESSED_ABOVE {
+                *buttons |= bumper;
+            }
+            *trigger = if bumper_held { u8::MAX } else { 0 };
+        };
+        swap(
+            &mut sent.buttons,
+            &mut sent.left_trigger,
+            xinput::LEFT_SHOULDER,
+        );
+        swap(
+            &mut sent.buttons,
+            &mut sent.right_trigger,
+            xinput::RIGHT_SHOULDER,
+        );
+    }
+
     pub fn update(&mut self, pad: Pad, now: Instant) -> LayerOutput {
         let mut events = Vec::new();
         let menu = pad.state.buttons & xinput::GUIDE != 0;
@@ -335,6 +389,7 @@ impl Layer {
         }
         self.apply_dpad_mode(&mut sent);
         self.apply_face_layout(&mut sent);
+        self.apply_shoulder_layout(&mut sent);
         self.previous = pad;
         LayerOutput { sent, events }
     }
@@ -473,6 +528,67 @@ mod tests {
             xinput::Y,
             "printed Y is on the left"
         );
+    }
+
+    fn swapped(start: Instant) -> Layer {
+        layer(start).with_shoulders(ShoulderLayout::Swapped)
+    }
+
+    fn triggers(left: u8, right: u8) -> Pad {
+        let mut pad = pad(0);
+        (pad.state.left_trigger, pad.state.right_trigger) = (left, right);
+        pad
+    }
+
+    #[test]
+    fn swapped_shoulders_send_l1_and_r1_as_triggers() {
+        let start = Instant::now();
+        let sent = swapped(start)
+            .update(pad(xinput::LEFT_SHOULDER | xinput::RIGHT_SHOULDER), start)
+            .sent;
+        assert_eq!(sent.buttons, 0);
+        assert_eq!((sent.left_trigger, sent.right_trigger), (255, 255));
+    }
+
+    #[test]
+    fn swapped_shoulders_send_l2_and_r2_as_bumpers() {
+        let start = Instant::now();
+        let sent = swapped(start).update(triggers(255, 0), start).sent;
+        assert_eq!(sent.buttons, xinput::LEFT_SHOULDER);
+        assert_eq!((sent.left_trigger, sent.right_trigger), (0, 0));
+    }
+
+    #[test]
+    fn printed_shoulders_pass_through_unchanged() {
+        let start = Instant::now();
+        let mut layer = layer(start);
+        let sent = layer.update(triggers(200, 0), start).sent;
+        assert_eq!((sent.buttons, sent.left_trigger), (0, 200));
+        let sent = layer.update(pad(xinput::RIGHT_SHOULDER), ms(start, 1)).sent;
+        assert_eq!(
+            (sent.buttons, sent.right_trigger),
+            (xinput::RIGHT_SHOULDER, 0)
+        );
+    }
+
+    #[test]
+    fn turbo_on_printed_l2_pulses_the_bumper_it_sends_when_swapped() {
+        let start = Instant::now();
+        let mut layer = swapped(start);
+        layer.turbo.left_trigger = true;
+        let firing = layer.update(triggers(255, 0), start).sent;
+        let resting = layer
+            .update(triggers(255, 0), start + TURBO_HALF_PERIOD)
+            .sent;
+        assert_eq!(firing.buttons, xinput::LEFT_SHOULDER);
+        assert_eq!(resting.buttons, 0);
+    }
+
+    #[test]
+    fn shoulder_layout_names_round_trip() {
+        for layout in [ShoulderLayout::Printed, ShoulderLayout::Swapped] {
+            assert_eq!(ShoulderLayout::parse(layout.as_str()), Some(layout));
+        }
     }
 
     #[test]

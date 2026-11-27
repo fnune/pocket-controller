@@ -1,5 +1,5 @@
 use crate::control::{Kind, Mode};
-use crate::layer::FaceLayout;
+use crate::layer::{FaceLayout, ShoulderLayout};
 use crate::xinput;
 
 pub const PRINTED_A: u16 = xinput::B;
@@ -42,6 +42,7 @@ impl ScreenWhilePlaying {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub face: FaceLayout,
+    pub shoulders: ShoulderLayout,
     pub rumble: bool,
     pub screen: ScreenWhilePlaying,
 }
@@ -50,6 +51,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             face: FaceLayout::default(),
+            shoulders: ShoulderLayout::default(),
             rumble: true,
             screen: ScreenWhilePlaying::default(),
         }
@@ -60,6 +62,7 @@ impl Default for Settings {
 pub enum Row {
     #[default]
     Face,
+    Shoulders,
     Rumble,
     Screen,
     Mode,
@@ -67,8 +70,9 @@ pub enum Row {
 }
 
 impl Row {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Face,
+        Self::Shoulders,
         Self::Rumble,
         Self::Screen,
         Self::Mode,
@@ -78,6 +82,7 @@ impl Row {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Face => "face",
+            Self::Shoulders => "shoulders",
             Self::Rumble => "rumble",
             Self::Screen => "screen",
             Self::Mode => "mode",
@@ -95,6 +100,7 @@ impl Row {
 }
 
 pub const FACE_VALUES: [FaceLayout; 2] = [FaceLayout::Label, FaceLayout::Position];
+pub const SHOULDER_VALUES: [ShoulderLayout; 2] = [ShoulderLayout::Printed, ShoulderLayout::Swapped];
 pub const RUMBLE_VALUES: [bool; 2] = [true, false];
 pub const MODE_VALUES: [Mode; 3] = [Mode::Automatic, Mode::Xbox, Mode::Gamepad];
 
@@ -111,6 +117,20 @@ pub fn face_detail(face: FaceLayout) -> &'static str {
         FaceLayout::Position => {
             "A is at the bottom: the bottom button sends A, whatever is printed on it."
         }
+    }
+}
+
+pub fn shoulder_label(shoulders: ShoulderLayout) -> &'static str {
+    match shoulders {
+        ShoulderLayout::Printed => "As printed",
+        ShoulderLayout::Swapped => "Swapped",
+    }
+}
+
+pub fn shoulder_detail(shoulders: ShoulderLayout) -> &'static str {
+    match shoulders {
+        ShoulderLayout::Printed => "L1 and R1 send LB and RB. L2 and R2 send LT and RT.",
+        ShoulderLayout::Swapped => "L2 and R2 send LB and RB. L1 and R1 send LT and RT.",
     }
 }
 
@@ -235,6 +255,9 @@ impl Menu {
                 let before = (*settings, self.mode);
                 match self.cursor {
                     Row::Face => settings.face = step(&FACE_VALUES, settings.face, forward),
+                    Row::Shoulders => {
+                        settings.shoulders = step(&SHOULDER_VALUES, settings.shoulders, forward)
+                    }
                     Row::Rumble if rumble_available(kind) => {
                         settings.rumble = step(&RUMBLE_VALUES, settings.rumble, forward)
                     }
@@ -288,6 +311,19 @@ mod tests {
             MenuOutcome::Nothing
         );
         assert_eq!(settings.screen, ScreenWhilePlaying::OffAfter);
+    }
+
+    #[test]
+    fn the_shoulder_row_swaps_and_changes_the_settings() {
+        let mut settings = Settings::default();
+        let mut menu = Menu::new(Mode::Automatic);
+        menu.press(xinput::DPAD_DOWN, &mut settings, Kind::Xbox);
+        assert_eq!(menu.cursor, Row::Shoulders);
+        assert_eq!(
+            menu.press(xinput::DPAD_RIGHT, &mut settings, Kind::Xbox),
+            MenuOutcome::Changed
+        );
+        assert_eq!(settings.shoulders, ShoulderLayout::Swapped);
     }
 
     #[test]
