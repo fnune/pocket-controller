@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   wait-for-ci:
     runs-on: ubuntu-26.04
@@ -71,7 +75,11 @@ jobs:
             git-cliff --latest --strip header > dist/release-notes.md
       - name: Publish the release
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
-            --notes-file dist/release-notes.md dist/release/*
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" --clobber dist/release/*
+          else
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
+              --notes-file dist/release-notes.md dist/release/*
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
