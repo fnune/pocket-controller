@@ -47,6 +47,8 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,8 +61,8 @@ jobs:
             echo "pak.json has version $pak_version, but the tag is ${GITHUB_REF_NAME}"
             exit 1
           fi
-      - name: Build the NextUI pak and the stock firmware app, and write the release notes
-        uses: fnune/ci@efd9d3202653a8ff8e41995ad8225c9f77a19a98
+      - name: Build, attest and publish the NextUI pak and the stock firmware app
+        uses: fnune/ci@89fe6fc6a28570ae8e1c8996029ecc9c16291b7a
         with:
           apt-packages: zip
           cache-paths: |
@@ -69,17 +71,6 @@ jobs:
             ./target
             ./.cache
           cache-key-files: Cargo.lock
-          command: |
-            just release-files
-            (cd dist/release && sha256sum -- * > SHA256SUMS)
-            git-cliff --latest --strip header > dist/release-notes.md
-      - name: Publish the release
-        run: |
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" --clobber dist/release/*
-          else
-            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
-              --notes-file dist/release-notes.md dist/release/*
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
+          command: just release-files
+          release: true
+          release-dir: dist/release
