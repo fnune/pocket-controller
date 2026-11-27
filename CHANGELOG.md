@@ -1,8 +1,7 @@
 ## [0.3.0] - 2026-11-27
 
-### Features
-
-- Set the D-pad mode in settings and open Debug with Y
+- A D-pad setting, the same choice MENU and up, left or right makes while playing: the D-pad, the left analog stick or the right analog stick
+- Debug opens with Y from anywhere in settings
 
 ## [0.2.0] - 2026-11-27
 
