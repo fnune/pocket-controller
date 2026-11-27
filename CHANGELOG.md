@@ -1,3 +1,22 @@
+## [0.2.0] - 2026-11-27
+
+### Features
+
+- Add a setting to swap the shoulder buttons
+
+### Refactor
+
+- Run the FunctionFS loops over Read and Write
+- Run the pad and power readers over a Read source
+- Lift the main loop's decisions out of run_loop and run
+- Take the screen helper's text measure and arguments as values
+- Put the display ioctls behind a Panel trait in Backlight
+- Drop the unused session level from Backlight
+- Move Hardware and the main loop from main.rs into a runtime module
+- Put Session, ScreenHelper, Presenter and the display behind traits in Hardware
+- Extract serve from run so the loop and shutdown run on any Hardware
+- Share the Brick gadget fixture from the gadget fake module
+
 ## [0.1.0] - 2026-11-23
 
 First release. Pocket Controller turns a handheld into a wired USB controller for a computer, with nothing to install on the computer. Only the TrimUI Brick on NextUI has been tested.
