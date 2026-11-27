@@ -111,6 +111,7 @@ fn serialize_settings(view: &SettingsView) -> String {
         view.cursor.as_str(),
         view.settings.face.as_str(),
         view.settings.shoulders.as_str(),
+        view.settings.dpad.as_str(),
         flag(view.settings.rumble),
         view.settings.screen.as_str(),
         view.mode.as_str(),
@@ -128,6 +129,7 @@ fn parse_settings(text: &str) -> Option<SettingsView> {
         settings: Settings {
             face: FaceLayout::parse(parts.next()?)?,
             shoulders: ShoulderLayout::parse(parts.next()?)?,
+            dpad: DpadMode::parse(parts.next()?)?,
             rumble: parse_flag(parts.next())?,
             screen: ScreenWhilePlaying::parse(parts.next()?)?,
         },
@@ -457,6 +459,7 @@ mod tests {
                 settings: Settings {
                     face: FaceLayout::Position,
                     shoulders: ShoulderLayout::Swapped,
+                    dpad: DpadMode::LeftStick,
                     rumble: false,
                     screen: ScreenWhilePlaying::OffAfter,
                 },

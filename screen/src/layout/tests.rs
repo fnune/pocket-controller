@@ -623,9 +623,11 @@ fn panel_text_wraps_inside_the_panel() {
 }
 
 #[test]
-fn the_debug_row_offers_a_instead_of_change() {
-    let all = texts(&draw_overlay(Some(settings_view(Row::Debug)), None, None));
-    assert!(all.contains(&"OPEN".to_string()) && !all.contains(&"Change".to_string()));
+fn every_settings_row_offers_debug_on_y() {
+    for row in Row::ALL {
+        let all = texts(&draw_overlay(Some(settings_view(row)), None, None));
+        assert!(all.contains(&"DEBUG".to_string()), "{row:?}");
+    }
 }
 
 #[test]

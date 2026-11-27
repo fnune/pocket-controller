@@ -191,7 +191,6 @@ pub enum Action {
     Settings(Option<SettingsView>),
     Debug(Option<DebugView>),
     SaveMode(Mode),
-    SaveDpadMode(DpadMode),
     SaveSettings(Settings),
     Exit,
 }
@@ -239,12 +238,6 @@ enum Overlay {
     Debug,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Saved {
-    pub settings: Settings,
-    pub dpad: DpadMode,
-}
-
 #[derive(Debug)]
 pub struct Controller {
     mode: Mode,
@@ -278,10 +271,10 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(mode: Mode, now: Instant) -> (Self, Vec<Action>) {
-        Self::with_saved(mode, Saved::default(), now)
+        Self::with_settings(mode, Settings::default(), now)
     }
 
-    pub fn with_saved(mode: Mode, saved: Saved, now: Instant) -> (Self, Vec<Action>) {
+    pub fn with_settings(mode: Mode, settings: Settings, now: Instant) -> (Self, Vec<Action>) {
         let kind = mode.first_kind();
         let controller = Self {
             mode,
@@ -300,13 +293,12 @@ impl Controller {
             hold: None,
             showing_busy: false,
             overlay: None,
-            settings: saved.settings,
+            settings,
             settings_shown: None,
             debug_shown: None,
             last_rumble: 0,
             budget: None,
-            layer: Layer::new(saved.settings.face, saved.dpad, now)
-                .with_shoulders(saved.settings.shoulders),
+            layer: Layer::new(settings.face, settings.dpad, now).with_shoulders(settings.shoulders),
             extras: Extras::default(),
             last_sent: None,
             sheet: None,
@@ -474,6 +466,7 @@ impl Controller {
     fn settings_changed(&mut self, actions: &mut Vec<Action>) {
         self.layer.face = self.settings.face;
         self.layer.shoulders = self.settings.shoulders;
+        self.layer.dpad_mode = self.settings.dpad;
         if !self.settings.rumble {
             actions.push(Action::Motor(false));
         }
@@ -571,7 +564,8 @@ impl Controller {
                     }
                 }
                 LayerEvent::DpadModeChanged(mode) => {
-                    actions.push(Action::SaveDpadMode(mode));
+                    self.settings.dpad = mode;
+                    actions.push(Action::SaveSettings(self.settings));
                     if let Some(view) = sheet.as_mut() {
                         view.dpad = mode;
                     }
@@ -760,7 +754,7 @@ mod tests {
     use super::*;
     use crate::chord::EXIT_CHORD;
     use crate::layer::FaceLayout;
-    use crate::settings::Row;
+    use crate::settings::{PRINTED_Y, Row};
 
     fn holding(buttons: u16) -> Input {
         Input::Pad(Pad {
@@ -915,7 +909,10 @@ mod tests {
             holding(xinput::GUIDE | xinput::DPAD_LEFT),
             start + Duration::from_millis(40),
         );
-        assert!(left.contains(&Action::SaveDpadMode(DpadMode::LeftStick)));
+        assert!(left.contains(&Action::SaveSettings(Settings {
+            dpad: DpadMode::LeftStick,
+            ..Settings::default()
+        })));
     }
 
     #[test]
@@ -1162,13 +1159,12 @@ mod tests {
     }
 
     #[test]
-    fn the_debug_row_opens_a_view_that_lets_buttons_through() {
+    fn printed_y_opens_a_debug_view_that_lets_buttons_through() {
         let start = Instant::now();
         let (mut controller, _) = Controller::new(Mode::Xbox, start);
         controller.handle(Input::HostEnabled, start);
         open_with_menu_and_start(&mut controller, start);
-        move_to(&mut controller, Row::Debug, start);
-        let actions = tap(&mut controller, PRINTED_A, start);
+        let actions = tap(&mut controller, PRINTED_Y, start);
         assert_eq!(settings_shown(&actions), Some(None));
         assert!(
             actions
@@ -1194,14 +1190,11 @@ mod tests {
             (ScreenWhilePlaying::AlwaysOn, None),
         ] {
             let start = Instant::now();
-            let saved = Saved {
-                settings: Settings {
-                    screen,
-                    ..Settings::default()
-                },
-                dpad: DpadMode::Dpad,
+            let settings = Settings {
+                screen,
+                ..Settings::default()
             };
-            let (mut controller, _) = Controller::with_saved(Mode::Xbox, saved, start);
+            let (mut controller, _) = Controller::with_settings(Mode::Xbox, settings, start);
             controller.handle(Input::HostEnabled, start);
             let actions = controller.handle(Input::Tick, start + DIM_AFTER);
             let light = actions.iter().find_map(|action| match action {
@@ -1215,14 +1208,11 @@ mod tests {
     #[test]
     fn saved_swapped_shoulders_apply_while_the_drawing_lights_the_pressed_button() {
         let start = Instant::now();
-        let saved = Saved {
-            settings: Settings {
-                shoulders: crate::layer::ShoulderLayout::Swapped,
-                ..Settings::default()
-            },
-            dpad: DpadMode::Dpad,
+        let settings = Settings {
+            shoulders: crate::layer::ShoulderLayout::Swapped,
+            ..Settings::default()
         };
-        let (mut controller, _) = Controller::with_saved(Mode::Xbox, saved, start);
+        let (mut controller, _) = Controller::with_settings(Mode::Xbox, settings, start);
         controller.handle(Input::HostEnabled, start);
         let actions = controller.handle(holding(xinput::LEFT_SHOULDER), start);
         let sent = actions.iter().find_map(|action| match action {

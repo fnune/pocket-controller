@@ -305,11 +305,6 @@ impl Hardware {
                     self.helper_failed(&error);
                 }
             }
-            Action::SaveDpadMode(mode) => {
-                if let Some(state) = &self.state {
-                    state.save_dpad_mode(mode);
-                }
-            }
             Action::Motor(running) => {
                 if let Some(motor) = &mut self.motor {
                     motor.set(running);
@@ -476,12 +471,12 @@ pub fn serve(
 ) -> Result<(), String> {
     let result = (|| {
         spawn_readers()?;
-        let saved = hardware
+        let settings = hardware
             .state
             .as_ref()
-            .map(StateDir::saved)
+            .map(StateDir::settings)
             .unwrap_or_default();
-        let (mut controller, actions) = Controller::with_saved(mode, saved, Instant::now());
+        let (mut controller, actions) = Controller::with_settings(mode, settings, Instant::now());
         for action in actions {
             hardware.apply(action)?;
         }
@@ -1198,18 +1193,15 @@ mod tests {
         let settings = crate::settings::Settings {
             face: crate::layer::FaceLayout::Position,
             shoulders: crate::layer::ShoulderLayout::Swapped,
+            dpad: crate::layer::DpadMode::LeftStick,
             rumble: false,
             screen: crate::settings::ScreenWhilePlaying::AlwaysOn,
         };
         rig.hardware.apply(Action::SaveMode(Mode::Gamepad)).unwrap();
         rig.hardware.apply(Action::SaveSettings(settings)).unwrap();
-        rig.hardware
-            .apply(Action::SaveDpadMode(crate::layer::DpadMode::LeftStick))
-            .unwrap();
         let saved = rig.hardware.state.as_ref().unwrap();
         assert_eq!(saved.mode(), Some(Mode::Gamepad));
-        assert_eq!(saved.saved().settings, settings);
-        assert_eq!(saved.saved().dpad, crate::layer::DpadMode::LeftStick);
+        assert_eq!(saved.settings(), settings);
     }
 
     #[test]
@@ -1336,7 +1328,10 @@ mod tests {
             .state
             .as_ref()
             .unwrap()
-            .save_dpad_mode(crate::layer::DpadMode::RightStick);
+            .save_settings(crate::settings::Settings {
+                dpad: crate::layer::DpadMode::RightStick,
+                ..crate::settings::Settings::default()
+            });
         let (_sender, receiver) = queue(&[Input::QuitRequested]);
         serve(&mut rig.hardware, Mode::Automatic, &receiver, || Ok(())).unwrap();
         assert_eq!(rig.script.borrow().requests[0].0, Kind::Xbox);

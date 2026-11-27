@@ -92,10 +92,15 @@ def press(code: int) -> Callable[[], object]:
     return tap
 
 
-def start(mode: str) -> None:
+STATE = "/tmp/pocket-controller-e2e-state"
+
+
+def start(mode: str, saved: dict[str, str] | None = None) -> None:
+    seed = "".join(f" && printf {value} > {STATE}/{name}" for name, value in (saved or {}).items())
+    _ = brick(f"rm -rf {STATE} && mkdir -p {STATE}{seed}")
     _ = brick(
         "rm -f /tmp/pocket-controller.log /tmp/presenter.log; "
-        f"nohup /tmp/pocket-controller --mode {mode} --state-dir /tmp/pocket-controller-e2e-state --presenter /tmp/fake-presenter "
+        f"nohup /tmp/pocket-controller --mode {mode} --state-dir {STATE} --presenter /tmp/fake-presenter "
         ">/tmp/pocket-controller.log 2>&1 </dev/null &"
     )
 
@@ -106,9 +111,16 @@ def quit_with_chord() -> None:
     inject(f"key:{BTN_SELECT:#x}:0", f"key:{BTN_START:#x}:0")
 
 
-def scenario(mode: str, vendor: str, product: str, checks: Callable[[str], None], label: str | None = None) -> None:
+def scenario(
+    mode: str,
+    vendor: str,
+    product: str,
+    checks: Callable[[str], None],
+    label: str | None = None,
+    saved: dict[str, str] | None = None,
+) -> None:
     print(f"{label or mode}:")
-    start(mode)
+    start(mode, saved)
     node = host_device(vendor, product)
     expect(f"laptop sees {vendor}:{product}", node is not None)
     if node:
@@ -162,9 +174,7 @@ def swapped_shoulder_checks(node: str) -> None:
 
 
 def shoulders_scenario() -> None:
-    _ = brick("rm -rf /tmp/pocket-controller-e2e-state && mkdir -p /tmp/pocket-controller-e2e-state && printf swapped > /tmp/pocket-controller-e2e-state/shoulders")
-    scenario("xbox", "045e", "028e", swapped_shoulder_checks, label="swapped shoulders")
-    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
+    scenario("xbox", "045e", "028e", swapped_shoulder_checks, label="swapped shoulders", saved={"shoulders": "swapped"})
 
 
 def hat(axis: int, value: int) -> None:
@@ -184,7 +194,6 @@ def open_settings() -> None:
 
 def settings_scenario() -> None:
     print("settings:")
-    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
     start("xbox")
     node = host_device("045e", "028e")
     expect("laptop sees 045e:028e", node is not None)
@@ -195,7 +204,7 @@ def settings_scenario() -> None:
         expect("settings keep buttons from the laptop", not pressed, str(events))
         log = brick("cat /tmp/pocket-controller.log")
         expect("settings open on the face buttons row", "cursor: Face" in log, log[-400:])
-        for _ in range(4):
+        for _ in range(5):
             hat(ABS_HAT0Y, 1)
         hat(ABS_HAT0X, 1)
         hat(ABS_HAT0X, 1)
@@ -204,7 +213,7 @@ def settings_scenario() -> None:
         press(BTN_A)()
         gamepad = host_device("1d6b", "0105")
         expect("closing settings switches the laptop to Generic", gamepad is not None)
-        saved = brick("cat /tmp/pocket-controller-e2e-state/mode")
+        saved = brick(f"cat {STATE}/mode")
         expect("the new mode is saved", saved.strip() == "gamepad", saved)
         if gamepad:
             time.sleep(1.0)
@@ -214,10 +223,12 @@ def settings_scenario() -> None:
     time.sleep(1.0)
     expect("pocket-controller quit", brick("pidof pocket-controller") == "", brick("tail -n 5 /tmp/pocket-controller.log"))
     expect("ADB is given back", adb_is_back())
-    _ = brick("rm -rf /tmp/pocket-controller-e2e-state")
+    _ = brick(f"rm -rf {STATE}")
 
 
 def main() -> None:
+    if brick("pidof pocket-controller"):
+        sys.exit("pocket-controller is already running on the Brick: quit it there, or wait for it to quit, then run this again")
     if "configured" not in brick("cat /sys/class/udc/*/state"):
         sys.exit("the Brick is not connected to this computer as a USB device (use its bottom port and a USB-A port here)")
     _ = subprocess.run(

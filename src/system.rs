@@ -9,7 +9,7 @@ use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-use crate::control::{DebugView, Input, LiveView, Mode, Saved, Screen, SheetView};
+use crate::control::{DebugView, Input, LiveView, Mode, Screen, SheetView};
 use crate::evdev::{self, AbsRange, Event, InputDevice, PadReader};
 use crate::frame::Frame;
 use crate::gadget::GadgetFs;
@@ -667,42 +667,37 @@ impl StateDir {
         self.write("mode", mode.as_str());
     }
 
-    pub fn saved(&self) -> Saved {
+    pub fn settings(&self) -> Settings {
         let defaults = Settings::default();
-        Saved {
-            settings: Settings {
-                face: self
-                    .read("face")
-                    .and_then(|text| FaceLayout::parse(&text))
-                    .unwrap_or(defaults.face),
-                shoulders: self
-                    .read("shoulders")
-                    .and_then(|text| ShoulderLayout::parse(&text))
-                    .unwrap_or(defaults.shoulders),
-                rumble: self
-                    .read("rumble")
-                    .map_or(defaults.rumble, |text| text.trim() != "off"),
-                screen: self
-                    .read("screen")
-                    .and_then(|text| ScreenWhilePlaying::parse(&text))
-                    .unwrap_or(defaults.screen),
-            },
+        Settings {
+            face: self
+                .read("face")
+                .and_then(|text| FaceLayout::parse(&text))
+                .unwrap_or(defaults.face),
+            shoulders: self
+                .read("shoulders")
+                .and_then(|text| ShoulderLayout::parse(&text))
+                .unwrap_or(defaults.shoulders),
             dpad: self
                 .read("dpad")
                 .and_then(|text| DpadMode::parse(&text))
-                .unwrap_or_default(),
+                .unwrap_or(defaults.dpad),
+            rumble: self
+                .read("rumble")
+                .map_or(defaults.rumble, |text| text.trim() != "off"),
+            screen: self
+                .read("screen")
+                .and_then(|text| ScreenWhilePlaying::parse(&text))
+                .unwrap_or(defaults.screen),
         }
     }
 
     pub fn save_settings(&self, settings: Settings) {
         self.write("face", settings.face.as_str());
         self.write("shoulders", settings.shoulders.as_str());
+        self.write("dpad", settings.dpad.as_str());
         self.write("rumble", if settings.rumble { "on" } else { "off" });
         self.write("screen", settings.screen.as_str());
-    }
-
-    pub fn save_dpad_mode(&self, mode: DpadMode) {
-        self.write("dpad", mode.as_str());
     }
 
     pub fn endpoint_budget(&self) -> Option<EndpointBudget> {
@@ -747,7 +742,7 @@ mod tests {
     fn a_state_dir_that_does_not_exist_yields_defaults() {
         let state = StateDir::new(scratch_dir("missing"));
         assert_eq!(state.mode(), None);
-        assert_eq!(state.saved(), Saved::default());
+        assert_eq!(state.settings(), Settings::default());
         assert_eq!(state.endpoint_budget(), None);
     }
 
@@ -758,23 +753,17 @@ mod tests {
         let settings = Settings {
             face: FaceLayout::Position,
             shoulders: ShoulderLayout::Swapped,
+            dpad: DpadMode::RightStick,
             rumble: false,
             screen: ScreenWhilePlaying::OffAfter,
         };
         state.save_mode(Mode::Gamepad);
         state.save_settings(settings);
-        state.save_dpad_mode(DpadMode::RightStick);
         state.save_endpoint_budget(EndpointBudget::OneInterrupt);
 
         let reloaded = StateDir::new(path.clone());
         assert_eq!(reloaded.mode(), Some(Mode::Gamepad));
-        assert_eq!(
-            reloaded.saved(),
-            Saved {
-                settings,
-                dpad: DpadMode::RightStick
-            }
-        );
+        assert_eq!(reloaded.settings(), settings);
         assert_eq!(
             reloaded.endpoint_budget(),
             Some(EndpointBudget::OneInterrupt)
@@ -791,7 +780,7 @@ mod tests {
         }
         let state = StateDir::new(path.clone());
         assert_eq!(state.mode(), None);
-        assert_eq!(state.saved(), Saved::default());
+        assert_eq!(state.settings(), Settings::default());
         assert_eq!(state.endpoint_budget(), None);
         let _ = std::fs::remove_dir_all(path);
     }
@@ -802,9 +791,9 @@ mod tests {
         std::fs::create_dir_all(&path).unwrap();
         let state = StateDir::new(path.clone());
         std::fs::write(path.join("rumble"), "off\n").unwrap();
-        assert!(!state.saved().settings.rumble);
+        assert!(!state.settings().rumble);
         std::fs::write(path.join("rumble"), "garbage").unwrap();
-        assert!(state.saved().settings.rumble);
+        assert!(state.settings().rumble);
         let _ = std::fs::remove_dir_all(path);
     }
 

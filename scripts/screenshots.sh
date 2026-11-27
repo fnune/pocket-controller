@@ -16,7 +16,7 @@ shot() {
 shot connected view=connected kind=xbox live=8201,0,0,0,0,0 live-turbo=b,rb live-dpad=dpad
 shot analog view=connected kind=xbox live=9,0,0,0,0,0 live-turbo=b live-dpad=left-stick
 shot shortcuts view=connected kind=xbox live=0,0,0,0,0,0 live-turbo=b,rb live-dpad=left-stick sheet=1 turbo=b,rb dpad=left-stick "note=Turbo A: on"
-shot settings view=connected kind=xbox settings=face,label,printed,1,dim,gamepad,xbox,xbox,1
+shot settings view=connected kind=xbox settings=face,label,printed,dpad,1,dim,gamepad,xbox,xbox,1
 shot debug view=connected kind=xbox live=8193,0,0,0,0,0 live-turbo= live-dpad=dpad debug=configured,xbox,1,one-interrupt,1,128,4097,0,0,-32767,0,0,0
 shot waiting view=waiting mode=automatic diagnosis=none
 

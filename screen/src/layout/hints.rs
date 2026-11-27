@@ -48,14 +48,12 @@ pub(super) fn pill_hint(canvas: &mut Canvas, pill: &str, text: &str, x: i32) -> 
 
 pub(super) const HINT_SPACING: i32 = 32;
 
-pub(super) fn settings_hints(canvas: &mut Canvas, on_debug: bool) {
+pub(super) fn settings_hints(canvas: &mut Canvas) {
     let x = pill_hint(canvas, "btn-updown", "Move", HINT_LEFT) + HINT_SPACING;
-    if on_debug {
-        hint(canvas, "A", "OPEN", x, HINTS_Y);
-    } else {
-        pill_hint(canvas, "btn-leftright", "Change", x);
-    }
-    hint_right(canvas, "B", "CLOSE", HINTS_Y);
+    pill_hint(canvas, "btn-leftright", "Change", x);
+    let close = hint_right(canvas, "B", "CLOSE", HINTS_Y);
+    let debug = hint_width(canvas, "DEBUG");
+    hint(canvas, "Y", "DEBUG", close - HINT_SPACING - debug, HINTS_Y);
 }
 
 pub(super) fn shortcuts_hint(canvas: &mut Canvas) {
@@ -74,9 +72,14 @@ pub(super) fn shortcuts_hint(canvas: &mut Canvas) {
 pub(super) const HINT_RADIUS: i32 = 23;
 pub(super) const HINT_LABEL_GAP: i32 = 12;
 
-pub(super) fn hint_right(canvas: &mut Canvas, letter: &str, label: &str, y: i32) {
-    let width = 2 * HINT_RADIUS + HINT_LABEL_GAP + canvas.design_width_of(Role::Hint, label);
-    hint(canvas, letter, label, HINT_RIGHT - width, y);
+pub(super) fn hint_width(canvas: &Canvas, label: &str) -> i32 {
+    2 * HINT_RADIUS + HINT_LABEL_GAP + canvas.design_width_of(Role::Hint, label)
+}
+
+pub(super) fn hint_right(canvas: &mut Canvas, letter: &str, label: &str, y: i32) -> i32 {
+    let left = HINT_RIGHT - hint_width(canvas, label);
+    hint(canvas, letter, label, left, y);
+    left
 }
 
 pub(super) fn hint(canvas: &mut Canvas, letter: &str, label: &str, x: i32, y: i32) {

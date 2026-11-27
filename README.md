@@ -34,10 +34,11 @@ Open settings with MENU + START, or with A while no computer is connected:
 
 - Face buttons: Nintendo layout (the button labelled A sends A, the default) or Xbox layout (the bottom button sends A, whatever is printed on it).
 - Shoulder buttons: as printed (L1 and R1 send LB and RB, the default) or swapped (L2 and R2 send LB and RB, L1 and R1 send LT and RT).
+- D-pad: the D-pad, the left analog stick or the right analog stick. MENU + up, left or right switches it while playing.
 - Rumble: on or off.
 - Screen while playing: dim (the default), stay on, or turn off, 30 s after a computer connects.
 - Mode: Automatic, Xbox-style or Generic. Changing it while connected makes the computer see the controller unplug and replug.
-- Debug: what the computer receives, live.
+- Y opens Debug: what the computer receives, live.
 
 ## Supported devices
 

@@ -1,9 +1,10 @@
 use crate::control::{Kind, Mode};
-use crate::layer::{FaceLayout, ShoulderLayout};
+use crate::layer::{DpadMode, FaceLayout, ShoulderLayout};
 use crate::xinput;
 
 pub const PRINTED_A: u16 = xinput::B;
 pub const PRINTED_B: u16 = xinput::A;
+pub const PRINTED_Y: u16 = xinput::X;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ScreenWhilePlaying {
@@ -43,6 +44,7 @@ impl ScreenWhilePlaying {
 pub struct Settings {
     pub face: FaceLayout,
     pub shoulders: ShoulderLayout,
+    pub dpad: DpadMode,
     pub rumble: bool,
     pub screen: ScreenWhilePlaying,
 }
@@ -52,6 +54,7 @@ impl Default for Settings {
         Self {
             face: FaceLayout::default(),
             shoulders: ShoulderLayout::default(),
+            dpad: DpadMode::default(),
             rumble: true,
             screen: ScreenWhilePlaying::default(),
         }
@@ -63,30 +66,30 @@ pub enum Row {
     #[default]
     Face,
     Shoulders,
+    Dpad,
     Rumble,
     Screen,
     Mode,
-    Debug,
 }
 
 impl Row {
     pub const ALL: [Self; 6] = [
         Self::Face,
         Self::Shoulders,
+        Self::Dpad,
         Self::Rumble,
         Self::Screen,
         Self::Mode,
-        Self::Debug,
     ];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Face => "face",
             Self::Shoulders => "shoulders",
+            Self::Dpad => "dpad",
             Self::Rumble => "rumble",
             Self::Screen => "screen",
             Self::Mode => "mode",
-            Self::Debug => "debug",
         }
     }
 
@@ -101,6 +104,7 @@ impl Row {
 
 pub const FACE_VALUES: [FaceLayout; 2] = [FaceLayout::Label, FaceLayout::Position];
 pub const SHOULDER_VALUES: [ShoulderLayout; 2] = [ShoulderLayout::Printed, ShoulderLayout::Swapped];
+pub const DPAD_VALUES: [DpadMode; 3] = [DpadMode::Dpad, DpadMode::LeftStick, DpadMode::RightStick];
 pub const RUMBLE_VALUES: [bool; 2] = [true, false];
 pub const MODE_VALUES: [Mode; 3] = [Mode::Automatic, Mode::Xbox, Mode::Gamepad];
 
@@ -131,6 +135,28 @@ pub fn shoulder_detail(shoulders: ShoulderLayout) -> &'static str {
     match shoulders {
         ShoulderLayout::Printed => "L1 and R1 send LB and RB. L2 and R2 send LT and RT.",
         ShoulderLayout::Swapped => "L2 and R2 send LB and RB. L1 and R1 send LT and RT.",
+    }
+}
+
+pub fn dpad_label(dpad: DpadMode) -> &'static str {
+    match dpad {
+        DpadMode::Dpad => "D-pad",
+        DpadMode::LeftStick => "Left stick",
+        DpadMode::RightStick => "Right stick",
+    }
+}
+
+pub fn dpad_detail(dpad: DpadMode) -> &'static str {
+    match dpad {
+        DpadMode::Dpad => {
+            "The D-pad sends D-pad presses. To switch while playing, hold MENU and press up, left or right."
+        }
+        DpadMode::LeftStick => {
+            "The D-pad moves the left analog stick. To switch while playing, hold MENU and press up, left or right."
+        }
+        DpadMode::RightStick => {
+            "The D-pad moves the right analog stick. To switch while playing, hold MENU and press up, left or right."
+        }
     }
 }
 
@@ -171,9 +197,6 @@ pub fn mode_detail(mode: Mode) -> &'static str {
 pub const RUMBLE_UNAVAILABLE: &str = "Not available in Generic mode";
 pub const RUMBLE_UNAVAILABLE_DETAIL: &str =
     "Generic mode is a plain USB gamepad, which has no way to receive rumble.";
-pub const DEBUG_VALUE: &str = "What the computer receives";
-pub const DEBUG_DETAIL: &str =
-    "Shows what the computer receives, live. Buttons still reach the computer while it is open.";
 pub const MODE_CHANGE_WARNING: &str = "The computer will see the controller unplug and replug.";
 
 pub fn rumble_available(kind: Kind) -> bool {
@@ -258,6 +281,7 @@ impl Menu {
                     Row::Shoulders => {
                         settings.shoulders = step(&SHOULDER_VALUES, settings.shoulders, forward)
                     }
+                    Row::Dpad => settings.dpad = step(&DPAD_VALUES, settings.dpad, forward),
                     Row::Rumble if rumble_available(kind) => {
                         settings.rumble = step(&RUMBLE_VALUES, settings.rumble, forward)
                     }
@@ -265,7 +289,7 @@ impl Menu {
                         settings.screen = step(&ScreenWhilePlaying::ALL, settings.screen, forward)
                     }
                     Row::Mode => self.mode = step(&MODE_VALUES, self.mode, forward),
-                    Row::Rumble | Row::Debug => {}
+                    Row::Rumble => {}
                 }
                 if before == (*settings, self.mode) {
                     MenuOutcome::Nothing
@@ -273,7 +297,7 @@ impl Menu {
                     MenuOutcome::Changed
                 }
             }
-            PRINTED_A if self.cursor == Row::Debug => MenuOutcome::OpenDebug,
+            PRINTED_Y => MenuOutcome::OpenDebug,
             PRINTED_B => MenuOutcome::Close,
             _ => MenuOutcome::Nothing,
         }
@@ -295,7 +319,7 @@ mod tests {
         for _ in 0..10 {
             menu.press(xinput::DPAD_DOWN, &mut settings, Kind::Xbox);
         }
-        assert_eq!(menu.cursor, Row::Debug);
+        assert_eq!(menu.cursor, Row::Mode);
     }
 
     #[test]
@@ -349,22 +373,35 @@ mod tests {
     }
 
     #[test]
-    fn printed_a_opens_debug_only_on_its_row_and_printed_b_closes() {
+    fn printed_y_opens_debug_from_any_row_and_printed_b_closes() {
         let mut settings = Settings::default();
         let mut menu = Menu::new(Mode::Automatic);
         assert_eq!(
             menu.press(PRINTED_A, &mut settings, Kind::Xbox),
             MenuOutcome::Nothing
         );
-        menu.cursor = Row::Debug;
-        assert_eq!(
-            menu.press(PRINTED_A, &mut settings, Kind::Xbox),
-            MenuOutcome::OpenDebug
-        );
+        for row in Row::ALL {
+            menu.cursor = row;
+            assert_eq!(
+                menu.press(PRINTED_Y, &mut settings, Kind::Xbox),
+                MenuOutcome::OpenDebug
+            );
+        }
         assert_eq!(
             menu.press(PRINTED_B, &mut settings, Kind::Xbox),
             MenuOutcome::Close
         );
+    }
+
+    #[test]
+    fn the_dpad_row_steps_through_the_dpad_modes() {
+        let mut settings = Settings::default();
+        let mut menu = Menu::new(Mode::Automatic);
+        menu.cursor = Row::Dpad;
+        menu.press(xinput::DPAD_RIGHT, &mut settings, Kind::Xbox);
+        assert_eq!(settings.dpad, DpadMode::LeftStick);
+        menu.press(xinput::DPAD_RIGHT, &mut settings, Kind::Xbox);
+        assert_eq!(settings.dpad, DpadMode::RightStick);
     }
 
     #[test]

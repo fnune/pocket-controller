@@ -1,10 +1,10 @@
 use super::*;
 use pocket_controller::layer::FaceLayout;
 use pocket_controller::settings::{
-    DEBUG_DETAIL, DEBUG_VALUE, FACE_VALUES, MODE_CHANGE_WARNING, MODE_VALUES, RUMBLE_UNAVAILABLE,
+    DPAD_VALUES, FACE_VALUES, MODE_CHANGE_WARNING, MODE_VALUES, RUMBLE_UNAVAILABLE,
     RUMBLE_UNAVAILABLE_DETAIL, RUMBLE_VALUES, Row, SHOULDER_VALUES, ScreenWhilePlaying,
-    SettingsView, face_detail, face_label, mode_detail, rumble_available, rumble_detail,
-    rumble_label, screen_detail, shoulder_detail, shoulder_label,
+    SettingsView, dpad_detail, dpad_label, face_detail, face_label, mode_detail, rumble_available,
+    rumble_detail, rumble_label, screen_detail, shoulder_detail, shoulder_label,
 };
 
 pub(super) const LIST_LEFT: i32 = 40;
@@ -73,10 +73,10 @@ pub(super) fn row_label(row: Row) -> &'static str {
     match row {
         Row::Face => "Face buttons",
         Row::Shoulders => "Shoulder buttons",
+        Row::Dpad => "D-pad",
         Row::Rumble => "Rumble",
         Row::Screen => "Screen while playing",
         Row::Mode => "Mode",
-        Row::Debug => "Debug",
     }
 }
 
@@ -84,11 +84,11 @@ fn row_value(view: &SettingsView, row: Row) -> (&'static str, bool) {
     match row {
         Row::Face => (face_label(view.settings.face), true),
         Row::Shoulders => (shoulder_label(view.settings.shoulders), true),
+        Row::Dpad => (dpad_label(view.settings.dpad), true),
         Row::Rumble if !rumble_available(view.kind) => (RUMBLE_UNAVAILABLE, false),
         Row::Rumble => (rumble_label(view.settings.rumble), true),
         Row::Screen => (view.settings.screen.label(), true),
         Row::Mode => (view.mode.label(), true),
-        Row::Debug => (DEBUG_VALUE, true),
     }
 }
 
@@ -118,6 +118,10 @@ pub(super) fn choices(view: &SettingsView) -> Vec<Choice> {
                 )
             })
             .collect(),
+        Row::Dpad => DPAD_VALUES
+            .iter()
+            .map(|dpad| plain(dpad_label(*dpad), *dpad == view.settings.dpad))
+            .collect(),
         Row::Rumble if rumble_available(view.kind) => RUMBLE_VALUES
             .iter()
             .map(|on| plain(rumble_label(*on), *on == view.settings.rumble))
@@ -134,7 +138,7 @@ pub(super) fn choices(view: &SettingsView) -> Vec<Choice> {
                 selected: *mode == view.mode,
             })
             .collect(),
-        Row::Rumble | Row::Debug => Vec::new(),
+        Row::Rumble => Vec::new(),
     }
 }
 
@@ -142,11 +146,11 @@ pub(super) fn detail(view: &SettingsView) -> &'static str {
     match view.cursor {
         Row::Face => face_detail(view.settings.face),
         Row::Shoulders => shoulder_detail(view.settings.shoulders),
+        Row::Dpad => dpad_detail(view.settings.dpad),
         Row::Rumble if !rumble_available(view.kind) => RUMBLE_UNAVAILABLE_DETAIL,
         Row::Rumble => rumble_detail(view.settings.rumble),
         Row::Screen => screen_detail(view.settings.screen),
         Row::Mode => mode_detail(view.mode),
-        Row::Debug => DEBUG_DETAIL,
     }
 }
 
@@ -331,6 +335,6 @@ pub(super) fn settings_screen(canvas: &mut Canvas, view: &SettingsView, hold: Op
     panel(canvas, view);
     match hold {
         Some(progress) => hold_bar(canvas, progress),
-        None => settings_hints(canvas, view.cursor == Row::Debug),
+        None => settings_hints(canvas),
     }
 }
